@@ -3,166 +3,335 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#060e04">
 <title>NUGZ 🌿 by iSmokeShop</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-<!-- GLOBAL PARALLAX BACKGROUND -->
-<div id="globalBg" class="global-bg"></div>
+<!-- ══════════════════════════════════════
+     GLOBAL CINEMATIC BACKGROUND
+══════════════════════════════════════ -->
+<div id="globalBg">
+  <div class="bg-image"></div>
+  <div class="bg-vignette"></div>
+  <div class="bg-scanlines"></div>
+</div>
+
+<!-- SMOKE PARTICLES (always visible) -->
+<div id="smokeLayer">
+  <div class="sp"></div><div class="sp"></div><div class="sp"></div>
+  <div class="sp"></div><div class="sp"></div><div class="sp"></div>
+  <div class="sp"></div><div class="sp"></div>
+</div>
 
 <div id="app">
 
-  <!-- ══════════ MAIN MENU ══════════ -->
+  <!-- ══════════════════════════════════════
+       MAIN MENU
+  ══════════════════════════════════════ -->
   <div id="screen-menu" class="screen active">
-    <div class="menu-smoke">
-      <div class="smoke-particle"></div><div class="smoke-particle"></div>
-      <div class="smoke-particle"></div><div class="smoke-particle"></div>
-      <div class="smoke-particle"></div><div class="smoke-particle"></div>
+
+    <!-- DESKTOP MENU LAYOUT -->
+    <div class="menu-desktop">
+      <div class="menu-desktop-left">
+        <div class="logo-area">
+          <div class="logo-glow-ring"></div>
+          <div class="logo-main">NUGZ</div>
+          <div class="logo-tagline">🌿 MATCH &amp; CLEAR 🌿</div>
+          <div class="logo-brand">
+            <img src="ismokeshop-logo.png" alt="iSmokeShop" class="brand-logo" onerror="this.style.display='none'">
+            <span class="brand-url">ismokeshop.net</span>
+          </div>
+        </div>
+        <div class="menu-nug-showcase" id="nugShowcase">
+          <!-- 5 large nug sprites displayed here on desktop -->
+        </div>
+      </div>
+      <div class="menu-desktop-right">
+        <div class="menu-panel">
+          <div class="menu-panel-header">SELECT OPTION</div>
+          <nav class="menu-nav">
+            <button class="menu-btn menu-btn--primary" id="btnNewGame-d">
+              <span class="btn-icon">🎮</span>
+              <span class="btn-label">NEW GAME</span>
+              <span class="btn-arrow">▶</span>
+            </button>
+            <button class="menu-btn" id="btnResume-d">
+              <span class="btn-icon">⏯</span>
+              <span class="btn-label">RESUME</span>
+              <span class="btn-arrow">▶</span>
+            </button>
+            <button class="menu-btn" id="btnHighScore-d">
+              <span class="btn-icon">🏆</span>
+              <span class="btn-label">HIGH SCORES</span>
+              <span class="btn-arrow">▶</span>
+            </button>
+            <button class="menu-btn" id="btnOptions-d">
+              <span class="btn-icon">⚙️</span>
+              <span class="btn-label">OPTIONS</span>
+              <span class="btn-arrow">▶</span>
+            </button>
+            <button class="menu-btn menu-btn--quit" id="btnQuit-d">
+              <span class="btn-icon">✕</span>
+              <span class="btn-label">QUIT</span>
+            </button>
+          </nav>
+          <div class="menu-panel-footer">
+            <a href="https://www.ismokeshop.net" target="_blank">www.ismokeshop.net</a>
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="menu-content">
 
-      <div class="logo-wrap">
-        <div class="logo-glow"></div>
-        <div class="logo-title">NUGZ</div>
-        <div class="logo-sub">🌿 Match &amp; Clear 🌿</div>
+    <!-- MOBILE MENU LAYOUT -->
+    <div class="menu-mobile">
+      <div class="mobile-logo">
+        <div class="mobile-logo-glow"></div>
+        <div class="mobile-logo-text">NUGZ</div>
+        <div class="mobile-logo-sub">🌿 Match &amp; Clear 🌿</div>
       </div>
-
-      <!-- CENTERED floating nugs row -->
-      <div class="floating-nugs" id="floatingNugs"></div>
-
-      <div class="menu-buttons">
-        <button class="btn btn-primary pulse-glow" id="btnNewGame">🎮 NEW GAME</button>
-        <button class="btn btn-secondary" id="btnResume">▶ RESUME</button>
-        <button class="btn btn-secondary" id="btnHighScore">🏆 HIGH SCORES</button>
-        <button class="btn btn-outline" id="btnOptions">⚙️ OPTIONS</button>
-        <button class="btn btn-ghost" id="btnQuit">✕ QUIT</button>
+      <div class="mobile-nugs-row" id="mobileNugsRow">
+        <!-- nugs injected by JS -->
       </div>
-
-      <div class="menu-footer">
-        <img src="ismokeshop-logo.png" alt="iSmokeShop" class="iss-logo" onerror="this.style.display='none'">
-        <a href="https://www.ismokeshop.net" target="_blank">www.ismokeshop.net</a>
+      <div class="mobile-menu-btns">
+        <button class="mbtn mbtn--primary" id="btnNewGame-m">🎮 NEW GAME</button>
+        <button class="mbtn" id="btnResume-m">▶ RESUME</button>
+        <button class="mbtn" id="btnHighScore-m">🏆 HIGH SCORES</button>
+        <button class="mbtn mbtn--outline" id="btnOptions-m">⚙️ OPTIONS</button>
+        <button class="mbtn mbtn--ghost" id="btnQuit-m">✕ QUIT</button>
+      </div>
+      <div class="mobile-footer">
+        <img src="ismokeshop-logo.png" alt="iSmokeShop" class="mobile-brand" onerror="this.style.display='none'">
       </div>
     </div>
-  </div>
 
-  <!-- ══════════ GAME SCREEN ══════════ -->
+  </div><!-- /screen-menu -->
+
+
+  <!-- ══════════════════════════════════════
+       GAME SCREEN — DESKTOP
+  ══════════════════════════════════════ -->
   <div id="screen-game" class="screen">
-    <div class="hud">
-      <div class="hud-left">
-        <button class="hud-btn" id="btnPause">⏸</button>
-        <div class="level-display">LVL <span id="dispLevel">1</span></div>
-      </div>
-      <div class="hud-center">
-        <div class="score-label">SCORE</div>
-        <div class="score-display" id="dispScore">0</div>
-      </div>
-      <div class="hud-right">
-        <div class="combo-display" id="dispCombo"></div>
-        <div class="highscore-mini">BEST&nbsp;<span id="dispBest">0</span></div>
-      </div>
-    </div>
 
-    <div class="progress-bar-wrap">
-      <div class="progress-bar" id="progressBar"></div>
-      <div class="progress-label" id="progressLabel">0 / 20</div>
-    </div>
+    <!-- DESKTOP GAME: sidebar + canvas side by side -->
+    <div class="game-desktop">
 
-    <div class="game-area">
-      <canvas id="gameCanvas"></canvas>
-      <div id="popEffects"></div>
-    </div>
-
-    <div class="game-footer">
-      <div class="moves-display">
-        <span class="moves-icon">💨</span>
-        <span id="dispMoves">30</span>&nbsp;PUFFS LEFT
+      <div class="game-sidebar-left">
+        <div class="sidebar-logo">NUGZ</div>
+        <div class="sidebar-score-block">
+          <div class="sb-label">SCORE</div>
+          <div class="sb-value" id="d-score">0</div>
+        </div>
+        <div class="sidebar-score-block">
+          <div class="sb-label">BEST</div>
+          <div class="sb-value sb-value--gold" id="d-best">0</div>
+        </div>
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-score-block">
+          <div class="sb-label">LEVEL</div>
+          <div class="sb-value sb-value--level" id="d-level">1</div>
+        </div>
+        <div class="sb-progress-wrap">
+          <div class="sb-progress-bar" id="d-progress"></div>
+        </div>
+        <div class="sb-progress-label" id="d-progress-label">0 / 20</div>
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-score-block">
+          <div class="sb-label">💨 PUFFS</div>
+          <div class="sb-value sb-value--puffs" id="d-moves">30</div>
+        </div>
+        <div class="sidebar-combo" id="d-combo"></div>
+        <div class="sidebar-divider"></div>
+        <div class="sb-label">NEXT UP</div>
+        <div class="sidebar-next" id="d-next"></div>
+        <div class="sidebar-actions">
+          <button class="side-btn" id="btnPause-d">⏸ PAUSE</button>
+        </div>
+        <div class="sidebar-brand">
+          <img src="ismokeshop-logo.png" alt="iSmokeShop" onerror="this.style.display='none'">
+        </div>
       </div>
-      <div class="nug-queue">
-        <div class="queue-label">NEXT</div>
-        <div id="nextNugDisplay"></div>
-      </div>
-    </div>
-  </div>
 
-  <!-- ══════════ PAUSE ══════════ -->
+      <div class="game-canvas-wrap">
+        <canvas id="gameCanvas"></canvas>
+        <div id="popEffects"></div>
+      </div>
+
+      <div class="game-sidebar-right">
+        <div class="sb-label">STRAIN GUIDE</div>
+        <div class="strain-guide" id="strainGuide">
+          <div class="strain-item" data-type="green">
+            <img src="sprites/green.png" alt="Green">
+            <div class="strain-info"><div class="strain-name">OG KUSH</div><div class="strain-desc">Classic indica</div></div>
+          </div>
+          <div class="strain-item" data-type="purple">
+            <img src="sprites/purple.png" alt="Purple">
+            <div class="strain-info"><div class="strain-name">PURPLE HAZE</div><div class="strain-desc">Psychedelic sativa</div></div>
+          </div>
+          <div class="strain-item" data-type="white">
+            <img src="sprites/white.png" alt="White">
+            <div class="strain-info"><div class="strain-name">WHITE WIDOW</div><div class="strain-desc">Frosty hybrid</div></div>
+          </div>
+          <div class="strain-item" data-type="teal">
+            <img src="sprites/teal.png" alt="Teal">
+            <div class="strain-info"><div class="strain-name">BLUE DREAM</div><div class="strain-desc">Smooth sativa</div></div>
+          </div>
+          <div class="strain-item" data-type="dark">
+            <img src="sprites/dark.png" alt="Dark">
+            <div class="strain-info"><div class="strain-name">GDPURPS</div><div class="strain-desc">Dense indica</div></div>
+          </div>
+        </div>
+        <div class="sidebar-divider"></div>
+        <div class="sb-label">HOW TO PLAY</div>
+        <div class="how-to-play">
+          <div class="htp-item">🖱️ Click to select a nug</div>
+          <div class="htp-item">↔️ Click adjacent to swap</div>
+          <div class="htp-item">🌿 Match 3+ in a row</div>
+          <div class="htp-item">⚡ Chains = combo bonus</div>
+          <div class="htp-item">⬆️ Fill the bar to level up</div>
+        </div>
+        <div class="sidebar-divider"></div>
+        <div class="sb-label">SESSION STATS</div>
+        <div class="session-stats">
+          <div class="stat-row"><span>Max Combo</span><span id="d-maxcombo">0x</span></div>
+          <div class="stat-row"><span>Nugs Cleared</span><span id="d-cleared">0</span></div>
+        </div>
+      </div>
+
+    </div><!-- /game-desktop -->
+
+    <!-- MOBILE GAME: stacked layout -->
+    <div class="game-mobile">
+      <div class="mobile-hud">
+        <div class="mhud-left">
+          <button class="mhud-btn" id="btnPause-m2">⏸</button>
+          <div class="mhud-level">LVL <span id="m-level">1</span></div>
+        </div>
+        <div class="mhud-center">
+          <div class="mhud-score-lbl">SCORE</div>
+          <div class="mhud-score" id="m-score">0</div>
+        </div>
+        <div class="mhud-right">
+          <div class="mhud-combo" id="m-combo"></div>
+          <div class="mhud-best">BEST <span id="m-best">0</span></div>
+        </div>
+      </div>
+
+      <div class="mobile-progress">
+        <div class="mobile-progress-bar" id="m-progress"></div>
+        <div class="mobile-progress-label" id="m-progress-label">0 / 20</div>
+      </div>
+
+      <div class="mobile-canvas-area">
+        <canvas id="gameCanvasMobile"></canvas>
+        <div id="popEffectsMobile"></div>
+      </div>
+
+      <div class="mobile-footer-hud">
+        <div class="mfhud-puffs">
+          <span class="puff-emoji">💨</span>
+          <span id="m-moves">30</span>
+          <span class="puffs-lbl">PUFFS</span>
+        </div>
+        <div class="mfhud-next">
+          <span class="next-lbl">NEXT</span>
+          <div id="m-next"></div>
+        </div>
+      </div>
+    </div><!-- /game-mobile -->
+
+  </div><!-- /screen-game -->
+
+
+  <!-- ══════════════════════════════════════
+       OVERLAY SCREENS (shared)
+  ══════════════════════════════════════ -->
+
+  <!-- PAUSE -->
   <div id="screen-pause" class="screen overlay-screen">
-    <div class="overlay-box">
-      <div class="overlay-title">⏸ PAUSED</div>
-      <button class="btn btn-primary" id="btnResumePause">▶ RESUME</button>
-      <button class="btn btn-secondary" id="btnRestartPause">🔄 RESTART</button>
-      <button class="btn btn-outline" id="btnMenuPause">🏠 MENU</button>
+    <div class="modal">
+      <div class="modal-title">⏸ PAUSED</div>
+      <button class="modal-btn modal-btn--primary" id="btnResumePause">▶ RESUME</button>
+      <button class="modal-btn" id="btnRestartPause">🔄 RESTART</button>
+      <button class="modal-btn modal-btn--outline" id="btnMenuPause">🏠 MAIN MENU</button>
     </div>
   </div>
 
-  <!-- ══════════ GAME OVER ══════════ -->
+  <!-- GAME OVER -->
   <div id="screen-gameover" class="screen overlay-screen">
-    <div class="overlay-box gameover-box">
-      <div class="gameover-emoji">💨</div>
-      <div class="overlay-title">BURNED OUT</div>
-      <div class="gameover-score-label">YOUR SCORE</div>
-      <div class="gameover-score" id="goScore">0</div>
-      <div class="gameover-best" id="goNewBest" style="display:none">🏆 NEW HIGH SCORE!</div>
-      <div class="gameover-stats">
-        <div>LEVEL REACHED: <span id="goLevel">1</span></div>
-        <div>BEST COMBO: <span id="goCombo">0</span>x</div>
+    <div class="modal modal--gameover">
+      <div class="go-smoke">💨</div>
+      <div class="modal-title modal-title--danger">BURNED OUT</div>
+      <div class="go-score-label">FINAL SCORE</div>
+      <div class="go-score" id="goScore">0</div>
+      <div class="go-newbest" id="goNewBest">🏆 NEW HIGH SCORE!</div>
+      <div class="go-stats">
+        <div class="go-stat"><span>LEVEL</span><span id="goLevel">1</span></div>
+        <div class="go-stat"><span>BEST COMBO</span><span id="goCombo">0x</span></div>
+        <div class="go-stat"><span>NUGS CLEARED</span><span id="goCleared">0</span></div>
       </div>
-      <button class="btn btn-primary pulse-glow" id="btnPlayAgain">🎮 PLAY AGAIN</button>
-      <button class="btn btn-outline" id="btnGoMenu">🏠 MENU</button>
+      <button class="modal-btn modal-btn--primary modal-btn--pulse" id="btnPlayAgain">🎮 PLAY AGAIN</button>
+      <button class="modal-btn modal-btn--outline" id="btnGoMenu">🏠 MENU</button>
     </div>
   </div>
 
-  <!-- ══════════ LEVEL UP ══════════ -->
+  <!-- LEVEL UP -->
   <div id="screen-levelup" class="screen overlay-screen">
-    <div class="overlay-box levelup-box">
-      <div class="levelup-stars" id="levelupStars">⭐⭐⭐</div>
-      <div class="levelup-badge">LEVEL UP!</div>
-      <div class="levelup-num" id="luLevel">2</div>
-      <div class="levelup-msg" id="luMsg">Keep it lit! 🔥</div>
-      <button class="btn btn-primary" id="btnContinue">KEEP GOING 🌿</button>
+    <div class="modal modal--levelup">
+      <div class="lu-stars" id="luStars">⭐⭐⭐</div>
+      <div class="lu-badge">LEVEL UP!</div>
+      <div class="lu-number" id="luLevel">2</div>
+      <div class="lu-msg" id="luMsg">Keep it lit! 🔥</div>
+      <div class="lu-reward">+12 PUFFS ADDED 💨</div>
+      <button class="modal-btn modal-btn--primary" id="btnContinue">LET'S GO 🌿</button>
     </div>
   </div>
 
-  <!-- ══════════ HIGH SCORES ══════════ -->
+  <!-- HIGH SCORES -->
   <div id="screen-scores" class="screen overlay-screen">
-    <div class="overlay-box scores-box">
-      <div class="overlay-title">🏆 HIGH SCORES</div>
+    <div class="modal modal--scores">
+      <div class="modal-title">🏆 HIGH SCORES</div>
       <div id="scoresList" class="scores-list"></div>
-      <button class="btn btn-outline" id="btnScoresBack">← BACK</button>
+      <button class="modal-btn modal-btn--outline" id="btnScoresBack">← BACK</button>
     </div>
   </div>
 
-  <!-- ══════════ OPTIONS ══════════ -->
+  <!-- OPTIONS -->
   <div id="screen-options" class="screen overlay-screen">
-    <div class="overlay-box">
-      <div class="overlay-title">⚙️ OPTIONS</div>
-      <div class="option-row">
-        <span>🔊 SOUND FX</span>
-        <label class="toggle"><input type="checkbox" id="optSound" checked><span class="toggle-slider"></span></label>
+    <div class="modal modal--options">
+      <div class="modal-title">⚙️ OPTIONS</div>
+      <div class="opts-grid">
+        <div class="opt-row">
+          <span>🔊 SOUND FX</span>
+          <label class="tog"><input type="checkbox" id="optSound" checked><span class="tog-sl"></span></label>
+        </div>
+        <div class="opt-row">
+          <span>🎵 MUSIC</span>
+          <label class="tog"><input type="checkbox" id="optMusic"><span class="tog-sl"></span></label>
+        </div>
+        <div class="opt-row">
+          <span>📳 VIBRATE</span>
+          <label class="tog"><input type="checkbox" id="optVibrate" checked><span class="tog-sl"></span></label>
+        </div>
+        <div class="opt-row">
+          <span>✨ EFFECTS</span>
+          <label class="tog"><input type="checkbox" id="optEffects" checked><span class="tog-sl"></span></label>
+        </div>
+        <div class="opt-row opt-row--full">
+          <span>🔉 MUSIC VOLUME</span>
+          <input type="range" id="optMusicVol" min="0" max="100" value="60" class="vol-range">
+        </div>
       </div>
-      <div class="option-row">
-        <span>🎵 MUSIC</span>
-        <label class="toggle"><input type="checkbox" id="optMusic"><span class="toggle-slider"></span></label>
-      </div>
-      <div class="option-row">
-        <span>📳 VIBRATE</span>
-        <label class="toggle"><input type="checkbox" id="optVibrate" checked><span class="toggle-slider"></span></label>
-      </div>
-      <div class="option-row">
-        <span>✨ EFFECTS</span>
-        <label class="toggle"><input type="checkbox" id="optEffects" checked><span class="toggle-slider"></span></label>
-      </div>
-      <div class="option-row">
-        <span>🔉 MUSIC VOL</span>
-        <input type="range" id="optMusicVol" min="0" max="100" value="60" class="vol-slider">
-      </div>
-      <button class="btn btn-outline" id="btnOptBack">← BACK</button>
+      <button class="modal-btn modal-btn--outline" id="btnOptBack">← BACK</button>
     </div>
   </div>
 
 </div><!-- /#app -->
 
-<!-- Audio -->
+<!-- AUDIO -->
 <audio id="bgMusic" loop preload="auto">
   <source src="NUGZ Main Menu (Take 1).mp3" type="audio/mpeg">
 </audio>
