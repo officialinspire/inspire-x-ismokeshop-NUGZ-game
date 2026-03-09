@@ -20,7 +20,7 @@
   <div class="bg-scanlines"></div>
 </div>
 
-<!-- SMOKE PARTICLES (always visible) -->
+<!-- SMOKE PARTICLES -->
 <div id="smokeLayer">
   <div class="sp"></div><div class="sp"></div><div class="sp"></div>
   <div class="sp"></div><div class="sp"></div><div class="sp"></div>
@@ -46,37 +46,26 @@
             <span class="brand-url">ismokeshop.net</span>
           </div>
         </div>
-        <div class="menu-nug-showcase" id="nugShowcase">
-          <!-- 5 large nug sprites displayed here on desktop -->
-        </div>
+        <div class="menu-nug-showcase" id="nugShowcase"></div>
       </div>
       <div class="menu-desktop-right">
         <div class="menu-panel">
           <div class="menu-panel-header">SELECT OPTION</div>
           <nav class="menu-nav">
             <button class="menu-btn menu-btn--primary" id="btnNewGame-d">
-              <span class="btn-icon">🎮</span>
-              <span class="btn-label">NEW GAME</span>
-              <span class="btn-arrow">▶</span>
+              <span class="btn-icon">🎮</span><span class="btn-label">NEW GAME</span><span class="btn-arrow">▶</span>
             </button>
             <button class="menu-btn" id="btnResume-d">
-              <span class="btn-icon">⏯</span>
-              <span class="btn-label">RESUME</span>
-              <span class="btn-arrow">▶</span>
+              <span class="btn-icon">⏯</span><span class="btn-label">RESUME</span><span class="btn-arrow">▶</span>
             </button>
             <button class="menu-btn" id="btnHighScore-d">
-              <span class="btn-icon">🏆</span>
-              <span class="btn-label">HIGH SCORES</span>
-              <span class="btn-arrow">▶</span>
+              <span class="btn-icon">🏆</span><span class="btn-label">HIGH SCORES</span><span class="btn-arrow">▶</span>
             </button>
             <button class="menu-btn" id="btnOptions-d">
-              <span class="btn-icon">⚙️</span>
-              <span class="btn-label">OPTIONS</span>
-              <span class="btn-arrow">▶</span>
+              <span class="btn-icon">⚙️</span><span class="btn-label">OPTIONS</span><span class="btn-arrow">▶</span>
             </button>
             <button class="menu-btn menu-btn--quit" id="btnQuit-d">
-              <span class="btn-icon">✕</span>
-              <span class="btn-label">QUIT</span>
+              <span class="btn-icon">✕</span><span class="btn-label">QUIT</span>
             </button>
           </nav>
           <div class="menu-panel-footer">
@@ -93,9 +82,7 @@
         <div class="mobile-logo-text">NUGZ</div>
         <div class="mobile-logo-sub">🌿 Match &amp; Clear 🌿</div>
       </div>
-      <div class="mobile-nugs-row" id="mobileNugsRow">
-        <!-- nugs injected by JS -->
-      </div>
+      <div class="mobile-nugs-row" id="mobileNugsRow"></div>
       <div class="mobile-menu-btns">
         <button class="mbtn mbtn--primary" id="btnNewGame-m">🎮 NEW GAME</button>
         <button class="mbtn" id="btnResume-m">▶ RESUME</button>
@@ -112,11 +99,11 @@
 
 
   <!-- ══════════════════════════════════════
-       GAME SCREEN — DESKTOP
+       GAME SCREEN
   ══════════════════════════════════════ -->
   <div id="screen-game" class="screen">
 
-    <!-- DESKTOP GAME: sidebar + canvas side by side -->
+    <!-- DESKTOP GAME: 3-column layout -->
     <div class="game-desktop">
 
       <div class="game-sidebar-left">
@@ -162,7 +149,7 @@
 
       <div class="game-sidebar-right">
         <div class="sb-label">STRAIN GUIDE</div>
-        <div class="strain-guide" id="strainGuide">
+        <div class="strain-guide">
           <div class="strain-item" data-type="green">
             <img src="sprites/green.png" alt="Green">
             <div class="strain-info"><div class="strain-name">OG KUSH</div><div class="strain-desc">Classic indica</div></div>
@@ -219,17 +206,14 @@
           <div class="mhud-best">BEST <span id="m-best">0</span></div>
         </div>
       </div>
-
       <div class="mobile-progress">
         <div class="mobile-progress-bar" id="m-progress"></div>
         <div class="mobile-progress-label" id="m-progress-label">0 / 20</div>
       </div>
-
       <div class="mobile-canvas-area">
         <canvas id="gameCanvasMobile"></canvas>
         <div id="popEffectsMobile"></div>
       </div>
-
       <div class="mobile-footer-hud">
         <div class="mfhud-puffs">
           <span class="puff-emoji">💨</span>
@@ -247,7 +231,7 @@
 
 
   <!-- ══════════════════════════════════════
-       OVERLAY SCREENS (shared)
+       OVERLAY SCREENS
   ══════════════════════════════════════ -->
 
   <!-- PAUSE -->
@@ -331,7 +315,6 @@
 
 </div><!-- /#app -->
 
-<!-- AUDIO -->
 <audio id="bgMusic" loop preload="auto">
   <source src="NUGZ Main Menu (Take 1).mp3" type="audio/mpeg">
 </audio>

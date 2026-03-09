@@ -1,7 +1,13 @@
 /* ═══════════════════════════════════════════════════════════
-   NUGZ v3 — index.js
-   Unified game engine: desktop sidebar layout + mobile stack
-   Full SFX / music / animations / select-deselect FX
+   NUGZ — index.js  (FINAL)
+   All bugs fixed:
+   • Pop/particle/select FX coordinates corrected (viewport→container-relative)
+   • Resume no longer overwrites current G.opts
+   • Loaded save validated (nextNugs, grid integrity)
+   • doLevelUp double-tap guard
+   • lowPuffs SFX triggers correctly (once, on transition to 5)
+   • highScores isNew check fixed (uses pre-add comparison)
+   • Combo resets properly between moves
 ═══════════════════════════════════════════════════════════ */
 
 'use strict';
@@ -20,10 +26,11 @@ const LEVEL_MSGS  = [
 ];
 const COMBO_LABELS = ['DANK!','FIRE! 🔥','LIT! 🌿','BLAZED! 💨','STONED!','COOKED! 🍃','RIPPED!','LEGENDARY! 🏆'];
 
-// ─── DETECT LAYOUT ────────────────────────────────────────
-const isMobile = () => window.innerWidth < 768 || (window.innerHeight <= 500 && window.innerWidth < window.innerHeight * 2);
+// ─── LAYOUT DETECTION ─────────────────────────────────────
+const isMobile = () =>
+  window.innerWidth < 768 || (window.innerHeight <= 500 && window.innerWidth < window.innerHeight * 2);
 
-// ─── STATE ────────────────────────────────────────────────
+// ─── GLOBAL STATE ─────────────────────────────────────────
 const G = {
   grid:[], score:0, level:1, moves:30,
   goal:LEVEL_GOALS[0], cleared:0, totalCleared:0,
@@ -33,12 +40,14 @@ const G = {
   opts:{ sound:true, music:false, vibrate:true, effects:true, musicVol:0.6 }
 };
 let highScores = [];
-let savedGame  = null;
-let images     = {};
-let cellAnims  = {};
+let savedGame   = null;
+let images      = {};
+let cellAnims   = {};
 let activeCanvas, activePopLayer;
+// Track previous moves count to fire lowPuffs SFX only on the transition to 5
+let _prevMoves  = 30;
 
-// ─── DOM ──────────────────────────────────────────────────
+// ─── DOM HELPERS ──────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const desktopCanvas = $('gameCanvas');
 const mobileCanvas  = $('gameCanvasMobile');
@@ -46,38 +55,33 @@ const desktopPop    = $('popEffects');
 const mobilePop     = $('popEffectsMobile');
 
 function setActiveCanvas() {
-  if (isMobile()) {
-    activeCanvas   = mobileCanvas;
-    activePopLayer = mobilePop;
-  } else {
-    activeCanvas   = desktopCanvas;
-    activePopLayer = desktopPop;
-  }
+  activeCanvas   = isMobile() ? mobileCanvas   : desktopCanvas;
+  activePopLayer = isMobile() ? mobilePop       : desktopPop;
 }
 
 // ─── SCREEN MANAGER ───────────────────────────────────────
 const SCREEN_IDS = ['menu','game','pause','gameover','levelup','scores','options'];
 function showScreen(name) {
-  SCREEN_IDS.forEach(id => {
-    const el = $(`screen-${id}`);
-    if (el) el.classList.remove('active');
-  });
+  SCREEN_IDS.forEach(id => $(`screen-${id}`)?.classList.remove('active'));
   $(`screen-${name}`)?.classList.add('active');
   document.body.className = `on-${name}`;
   handleMusic(name);
 }
 
 // ═══════════════════════════════════════════════════════════
-//  AUDIO ENGINE
+//  AUDIO ENGINE  (Web Audio API — no files needed for SFX)
 // ═══════════════════════════════════════════════════════════
-let ac = null;
+let _ac = null;
 function getAC() {
-  if (!ac) try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){}
-  return ac;
+  if (!_ac) try { _ac = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){}
+  return _ac;
 }
-function resumeAC() { const a = getAC(); if (a?.state === 'suspended') a.resume(); }
+function resumeAC() {
+  const a = getAC();
+  if (a?.state === 'suspended') a.resume();
+}
 
-function tone(freq, type='sine', dur=0.09, vol=0.28, delay=0, atk=0.01) {
+function tone(freq, type='sine', dur=0.09, vol=0.28, delay=0, atk=0.012) {
   if (!G.opts.sound) return;
   const a = getAC(); if (!a) return;
   try {
@@ -85,42 +89,45 @@ function tone(freq, type='sine', dur=0.09, vol=0.28, delay=0, atk=0.01) {
     o.connect(g); g.connect(a.destination);
     o.type = type;
     o.frequency.setValueAtTime(freq, a.currentTime + delay);
-    g.gain.setValueAtTime(0, a.currentTime + delay);
+    g.gain.setValueAtTime(0,    a.currentTime + delay);
     g.gain.linearRampToValueAtTime(vol, a.currentTime + delay + atk);
     g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + delay + atk + dur);
     o.start(a.currentTime + delay);
-    o.stop(a.currentTime + delay + atk + dur + 0.05);
+    o.stop( a.currentTime + delay + atk + dur + 0.06);
   } catch(e){}
 }
-function chord(freqs, type, dur, vol) { freqs.forEach((f,i) => tone(f, type, dur, vol/freqs.length, i*0.016)); }
+function chord(freqs, type, dur, vol) {
+  freqs.forEach((f,i) => tone(f, type, dur, vol / freqs.length, i * 0.016));
+}
 
 const SFX = {
-  select()  { tone(480,'sine',0.07,0.22); tone(720,'sine',0.05,0.12,0.045); },
-  deselect(){ tone(320,'sine',0.07,0.18); tone(200,'sine',0.06,0.10,0.05); },
-  swap()    { tone(310,'triangle',0.07,0.2); tone(430,'triangle',0.07,0.2,0.065); },
-  invalid() { tone(160,'sawtooth',0.10,0.28); tone(120,'sawtooth',0.09,0.22,0.09); },
-  pop(n)    {
-    const b = 360 + Math.min(n,8)*28;
-    chord([b, b*1.26, b*1.5, b*2].slice(0,Math.min(n,4)), 'sine', 0.12, 0.38);
+  select()   { tone(480,'sine',0.07,0.22); tone(720,'sine',0.05,0.12,0.046); },
+  deselect() { tone(320,'sine',0.07,0.18); tone(200,'sine',0.06,0.10,0.052); },
+  swap()     { tone(310,'triangle',0.07,0.20); tone(430,'triangle',0.07,0.20,0.066); },
+  invalid()  { tone(160,'sawtooth',0.10,0.28); tone(120,'sawtooth',0.09,0.22,0.092); },
+  pop(n) {
+    const b = 360 + Math.min(n,8) * 28;
+    chord([b, b*1.26, b*1.5, b*2].slice(0, Math.min(n,4)), 'sine', 0.12, 0.38);
     tone(85,'square',0.04,0.32);
   },
   combo(lvl) {
-    const r = 270 + lvl*45;
-    const sc = [1,1.25,1.5,1.875,2,2.5];
-    for (let i=0; i<Math.min(lvl+2,sc.length); i++) tone(r*sc[i],'sine',0.13,0.26,i*0.075);
+    const r = 270 + lvl * 45;
+    const sc = [1, 1.25, 1.5, 1.875, 2, 2.5];
+    for (let i = 0; i < Math.min(lvl+2, sc.length); i++)
+      tone(r * sc[i], 'sine', 0.13, 0.26, i * 0.076);
   },
   bigClear() {
     chord([261,329,392,523,659],'triangle',0.22,0.28);
     tone(58,'sine',0.35,0.55,0.04);
   },
-  levelUp()  {
+  levelUp() {
     [523,659,784,1047,1318].forEach((n,i) => tone(n,'triangle',0.16,0.28,i*0.1));
     tone(58,'sine',0.45,0.45,0.04);
   },
-  gameOver() { [400,340,280,210].forEach((n,i) => tone(n,'sawtooth',0.2,0.24,i*0.19)); },
-  shuffle()  { for(let i=0;i<6;i++) tone(180+Math.random()*400,'sine',0.06,0.1,i*0.045); },
+  gameOver() { [400,340,280,210].forEach((n,i) => tone(n,'sawtooth',0.20,0.24,i*0.19)); },
+  shuffle()  { for(let i=0;i<6;i++) tone(180+Math.random()*400,'sine',0.06,0.10,i*0.046); },
   lowPuffs() { tone(270,'square',0.09,0.32); tone(200,'square',0.09,0.26,0.12); },
-  newGame()  { [261,329,392,523].forEach((n,i) => tone(n,'triangle',0.14,0.28,i*0.085)); },
+  newGame()  { [261,329,392,523].forEach((n,i) => tone(n,'triangle',0.14,0.28,i*0.086)); },
 };
 
 // ─── MUSIC ────────────────────────────────────────────────
@@ -133,19 +140,24 @@ function handleMusic(screen) {
 }
 function toggleMusic(on) {
   G.opts.music = on;
-  if (on) { bgMusic?.play().catch(()=>{}); }
-  else bgMusic?.pause();
+  on ? bgMusic?.play().catch(()=>{}) : bgMusic?.pause();
 }
 
 // ─── HAPTICS ──────────────────────────────────────────────
-function vib(p) { if(G.opts.vibrate && navigator.vibrate) navigator.vibrate(p); }
+function vib(pattern) {
+  if (G.opts.vibrate && navigator.vibrate) navigator.vibrate(pattern);
+}
 
 // ═══════════════════════════════════════════════════════════
 //  IMAGE LOADING
 // ═══════════════════════════════════════════════════════════
 function loadImages() {
   return new Promise(resolve => {
-    const keys = [...NUG_TYPES, ...NUG_TYPES.map(n=>n+'_glow'), ...NUG_TYPES.map(n=>n+'_pop')];
+    const keys = [
+      ...NUG_TYPES,
+      ...NUG_TYPES.map(n => n + '_glow'),
+      ...NUG_TYPES.map(n => n + '_pop')
+    ];
     let pending = keys.length;
     keys.forEach(k => {
       const img = new Image();
@@ -160,190 +172,245 @@ function loadImages() {
 //  GRID ENGINE
 // ═══════════════════════════════════════════════════════════
 function randNug(excl) {
-  let t = excl ? NUG_TYPES.filter(x=>x!==excl) : [...NUG_TYPES];
-  return t[Math.floor(Math.random()*t.length)];
+  const t = excl ? NUG_TYPES.filter(x => x !== excl) : [...NUG_TYPES];
+  return t[Math.floor(Math.random() * t.length)];
 }
+
 function createGrid() {
   const g = [];
-  for (let r=0; r<ROWS; r++) {
+  for (let r = 0; r < ROWS; r++) {
     g[r] = [];
-    for (let c=0; c<COLS; c++) {
+    for (let c = 0; c < COLS; c++) {
       let ex = null;
-      if (c>=2 && g[r][c-1]===g[r][c-2]) ex = g[r][c-1];
-      if (r>=2 && g[r-1][c]===g[r-2][c]) { const v=g[r-1][c]; ex=(ex&&ex!==v)?null:v; }
+      if (c >= 2 && g[r][c-1] === g[r][c-2]) ex = g[r][c-1];
+      if (r >= 2 && g[r-1][c] === g[r-2][c]) {
+        const v = g[r-1][c];
+        ex = (ex && ex !== v) ? null : v;
+      }
       g[r][c] = randNug(ex);
     }
   }
   return g;
 }
+
 function findMatches(g) {
   const m = new Set();
-  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS-2;c++) {
-    const t=g[r][c]; if(!t) continue;
-    let l=1; while(c+l<COLS&&g[r][c+l]===t) l++;
-    if(l>=MIN_MATCH) for(let i=0;i<l;i++) m.add(`${r},${c+i}`);
+  // Horizontal
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS - 2; c++) {
+      const t = g[r][c]; if (!t) continue;
+      let l = 1;
+      while (c + l < COLS && g[r][c+l] === t) l++;
+      if (l >= MIN_MATCH) for (let i = 0; i < l; i++) m.add(`${r},${c+i}`);
+    }
   }
-  for(let c=0;c<COLS;c++) for(let r=0;r<ROWS-2;r++) {
-    const t=g[r][c]; if(!t) continue;
-    let l=1; while(r+l<ROWS&&g[r+l][c]===t) l++;
-    if(l>=MIN_MATCH) for(let i=0;i<l;i++) m.add(`${r+i},${c}`);
+  // Vertical
+  for (let c = 0; c < COLS; c++) {
+    for (let r = 0; r < ROWS - 2; r++) {
+      const t = g[r][c]; if (!t) continue;
+      let l = 1;
+      while (r + l < ROWS && g[r+l][c] === t) l++;
+      if (l >= MIN_MATCH) for (let i = 0; i < l; i++) m.add(`${r+i},${c}`);
+    }
   }
   return m;
 }
+
 function gravity(g) {
-  for(let c=0;c<COLS;c++) {
-    for(let r=ROWS-1;r>0;r--) if(!g[r][c]) {
-      let a=r-1; while(a>=0&&!g[a][c]) a--;
-      if(a>=0){g[r][c]=g[a][c];g[a][c]=null;}
+  for (let c = 0; c < COLS; c++) {
+    // Compact: pull non-null cells down
+    for (let r = ROWS - 1; r > 0; r--) {
+      if (!g[r][c]) {
+        let a = r - 1;
+        while (a >= 0 && !g[a][c]) a--;
+        if (a >= 0) { g[r][c] = g[a][c]; g[a][c] = null; }
+      }
     }
-    for(let r=0;r<ROWS;r++) if(!g[r][c]) g[r][c]=randNug();
+    // Fill remaining empty cells at top
+    for (let r = 0; r < ROWS; r++) {
+      if (!g[r][c]) g[r][c] = randNug();
+    }
   }
 }
-function swapCells(g,r1,c1,r2,c2){const t=g[r1][c1];g[r1][c1]=g[r2][c2];g[r2][c2]=t;}
-function isAdj(r1,c1,r2,c2){return Math.abs(r1-r2)+Math.abs(c1-c2)===1;}
+
+function swapCells(g, r1, c1, r2, c2) {
+  const t = g[r1][c1]; g[r1][c1] = g[r2][c2]; g[r2][c2] = t;
+}
+
+function isAdj(r1, c1, r2, c2) {
+  return Math.abs(r1 - r2) + Math.abs(c1 - c2) === 1;
+}
+
 function hasMove(g) {
-  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) {
-    if(c+1<COLS){swapCells(g,r,c,r,c+1);const m=findMatches(g).size;swapCells(g,r,c,r,c+1);if(m>0)return true;}
-    if(r+1<ROWS){swapCells(g,r,c,r+1,c);const m=findMatches(g).size;swapCells(g,r,c,r+1,c);if(m>0)return true;}
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (c + 1 < COLS) {
+        swapCells(g,r,c,r,c+1);
+        const ok = findMatches(g).size > 0;
+        swapCells(g,r,c,r,c+1);
+        if (ok) return true;
+      }
+      if (r + 1 < ROWS) {
+        swapCells(g,r,c,r+1,c);
+        const ok = findMatches(g).size > 0;
+        swapCells(g,r,c,r+1,c);
+        if (ok) return true;
+      }
+    }
   }
   return false;
 }
 
 // ═══════════════════════════════════════════════════════════
-//  CANVAS DRAWING
+//  CANVAS SIZING & DRAWING
 // ═══════════════════════════════════════════════════════════
+function calcCellSize() {
+  if (isMobile()) {
+    // Top HUD: ~54px + progress bar: ~7px = 61px
+    // Bottom footer HUD: ~58px
+    // Small padding: 8px total
+    const avH = window.innerHeight - 61 - 58 - 8;
+    const avW = window.innerWidth - 6;
+    return Math.max(30, Math.floor(Math.min(avW / COLS, avH / ROWS, 76)));
+  } else {
+    const sideW = 220 + 200 + 2; // left + right sidebar + borders
+    const avW = window.innerWidth - sideW - 20;
+    const avH = window.innerHeight - 16;
+    return Math.max(40, Math.floor(Math.min(avW / COLS, avH / ROWS, 88)));
+  }
+}
+
 function resizeCanvas() {
   setActiveCanvas();
   const cs = G.cellSize;
   activeCanvas.width  = cs * COLS;
   activeCanvas.height = cs * ROWS;
-  // Hide the other canvas
-  desktopCanvas.style.display = activeCanvas === desktopCanvas ? 'block' : 'none';
-  mobileCanvas.style.display  = activeCanvas === mobileCanvas  ? 'block' : 'none';
+  desktopCanvas.style.display = (activeCanvas === desktopCanvas) ? 'block' : 'none';
+  mobileCanvas.style.display  = (activeCanvas === mobileCanvas)  ? 'block' : 'none';
 }
 
-function calcCellSize() {
-  if (isMobile()) {
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    // Deduct HUD areas (top ~54+7=61px, bottom ~58px)
-    const availH = vh - 61 - 58 - 8;
-    const availW = vw - 8;
-    return Math.floor(Math.min(availW/COLS, availH/ROWS, 76));
-  } else {
-    const sideW = 220 + 200; // left + right sidebar
-    const availW = window.innerWidth - sideW - 24;
-    const availH = window.innerHeight - 20;
-    return Math.floor(Math.min(availW/COLS, availH/ROWS, 86));
-  }
-}
-
-function rrect(c2d, x, y, w, h, r) {
-  c2d.beginPath();
-  c2d.moveTo(x+r,y); c2d.lineTo(x+w-r,y); c2d.arcTo(x+w,y,x+w,y+r,r);
-  c2d.lineTo(x+w,y+h-r); c2d.arcTo(x+w,y+h,x+w-r,y+h,r);
-  c2d.lineTo(x+r,y+h); c2d.arcTo(x,y+h,x,y+h-r,r);
-  c2d.lineTo(x,y+r); c2d.arcTo(x,y,x+r,y,r);
-  c2d.closePath();
+function rrect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y); ctx.arcTo(x+w, y,   x+w, y+r,   r);
+  ctx.lineTo(x+w, y+h-r); ctx.arcTo(x+w, y+h, x+w-r, y+h, r);
+  ctx.lineTo(x+r, y+h); ctx.arcTo(x,   y+h, x,   y+h-r, r);
+  ctx.lineTo(x, y+r);   ctx.arcTo(x,   y,   x+r, y,     r);
+  ctx.closePath();
 }
 
 function drawGrid() {
   if (!activeCanvas) return;
   const cvs = activeCanvas;
-  const c2d = cvs.getContext('2d');
+  const ctx = cvs.getContext('2d');
   const cs  = G.cellSize;
-  c2d.clearRect(0,0,cvs.width,cvs.height);
 
-  // Background
-  c2d.fillStyle = 'rgba(4,10,2,0.8)';
-  c2d.fillRect(0,0,cvs.width,cvs.height);
+  ctx.clearRect(0, 0, cvs.width, cvs.height);
+
+  // Dark translucent grid backing
+  ctx.fillStyle = 'rgba(3,8,2,0.78)';
+  ctx.fillRect(0, 0, cvs.width, cvs.height);
 
   // Grid lines
-  c2d.strokeStyle = 'rgba(111,207,63,0.08)';
-  c2d.lineWidth = 1;
-  for(let r=0;r<=ROWS;r++){c2d.beginPath();c2d.moveTo(0,r*cs);c2d.lineTo(cvs.width,r*cs);c2d.stroke();}
-  for(let c=0;c<=COLS;c++){c2d.beginPath();c2d.moveTo(c*cs,0);c2d.lineTo(c*cs,cvs.height);c2d.stroke();}
+  ctx.strokeStyle = 'rgba(111,207,63,0.09)';
+  ctx.lineWidth = 1;
+  for (let r = 0; r <= ROWS; r++) {
+    ctx.beginPath(); ctx.moveTo(0, r*cs); ctx.lineTo(cvs.width, r*cs); ctx.stroke();
+  }
+  for (let c = 0; c <= COLS; c++) {
+    ctx.beginPath(); ctx.moveTo(c*cs, 0); ctx.lineTo(c*cs, cvs.height); ctx.stroke();
+  }
 
-  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) {
-    const type = G.grid[r]?.[c];
-    if(!type) continue;
-    const key  = `${r},${c}`;
-    const anim = cellAnims[key] || {};
-    const isSel= G.selected?.[0]===r && G.selected?.[1]===c;
-    const scale = anim.scale ?? 1;
-    const alpha = anim.alpha ?? 1;
-    const ddx   = anim.dx ?? 0;
-    const ddy   = anim.dy ?? 0;
-    const pad   = cs < 60 ? 3 : 5;
-    const size  = (cs - pad*2) * scale;
-    const cx = c*cs + cs/2 + ddx;
-    const cy = r*cs + cs/2 + ddy;
+  // Draw cells
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const type = G.grid[r]?.[c];
+      if (!type) continue;
 
-    c2d.save();
-    c2d.globalAlpha = alpha;
+      const key  = `${r},${c}`;
+      const anim = cellAnims[key] || {};
+      const isSel = G.selected?.[0] === r && G.selected?.[1] === c;
+      const scale = anim.scale ?? 1;
+      const alpha = anim.alpha ?? 1;
+      const ddx   = anim.dx ?? 0;
+      const ddy   = anim.dy ?? 0;
+      const pad   = cs < 56 ? 2 : 4;
+      const size  = (cs - pad * 2) * scale;
+      const cx = c * cs + cs / 2 + ddx;
+      const cy = r * cs + cs / 2 + ddy;
 
-    // Selected cell highlight
-    if (isSel) {
-      c2d.fillStyle = 'rgba(111,207,63,0.16)';
-      rrect(c2d, c*cs+2, r*cs+2, cs-4, cs-4, 8);
-      c2d.fill();
-    }
+      ctx.save();
+      ctx.globalAlpha = alpha;
 
-    // Draw nug image
-    c2d.translate(cx, cy);
-    if (isSel) { c2d.shadowColor='#6fcf3f'; c2d.shadowBlur=20; }
-    const imgKey = isSel ? type+'_glow' : type;
-    const img = images[imgKey];
-    if (img?.complete && img.naturalWidth > 0) {
-      c2d.drawImage(img, -size/2, -size/2, size, size);
-    } else {
-      // Fallback
-      c2d.beginPath(); c2d.arc(0,0,size/2,0,Math.PI*2);
-      c2d.fillStyle = NUG_COLORS[type]||'#6fcf3f'; c2d.fill();
-      c2d.fillStyle='rgba(255,255,255,0.2)'; c2d.font=`${size*0.4}px sans-serif`;
-      c2d.textAlign='center'; c2d.textBaseline='middle'; c2d.fillText('🌿',0,0);
-    }
-    c2d.restore();
+      // Selected highlight
+      if (isSel) {
+        ctx.fillStyle = 'rgba(111,207,63,0.18)';
+        rrect(ctx, c*cs+2, r*cs+2, cs-4, cs-4, 8);
+        ctx.fill();
+      }
 
-    // Selected ring
-    if (isSel) {
-      c2d.save();
-      c2d.strokeStyle='#6fcf3f'; c2d.lineWidth=2.5;
-      c2d.shadowColor='#6fcf3f'; c2d.shadowBlur=12;
-      rrect(c2d, c*cs+3, r*cs+3, cs-6, cs-6, 8); c2d.stroke();
-      c2d.restore();
+      ctx.translate(cx, cy);
+      if (isSel) { ctx.shadowColor = '#6fcf3f'; ctx.shadowBlur = 22; }
+
+      const imgKey = isSel ? type + '_glow' : type;
+      const img = images[imgKey];
+      if (img?.complete && img.naturalWidth > 0) {
+        ctx.drawImage(img, -size/2, -size/2, size, size);
+      } else {
+        // Fallback circle
+        ctx.beginPath(); ctx.arc(0, 0, size/2, 0, Math.PI*2);
+        ctx.fillStyle = NUG_COLORS[type] || '#6fcf3f'; ctx.fill();
+        ctx.font = `${size*0.38}px sans-serif`;
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('🌿', 0, 0);
+      }
+
+      ctx.restore();
+
+      // Selection ring drawn AFTER restore so no global alpha
+      if (isSel) {
+        ctx.save();
+        ctx.strokeStyle = '#6fcf3f'; ctx.lineWidth = 2.5;
+        ctx.shadowColor = '#6fcf3f'; ctx.shadowBlur  = 14;
+        rrect(ctx, c*cs+3, r*cs+3, cs-6, cs-6, 8); ctx.stroke();
+        ctx.restore();
+      }
     }
   }
 }
 
-// ─── ANIMATION HELPERS ────────────────────────────────────
-function eio(t){ return t<.5?2*t*t:-1+(4-2*t)*t; }
-function eob(t){ const c=2.5; return 1+c*Math.pow(t-1,3)+c*Math.pow(t-1,2); }
+// ═══════════════════════════════════════════════════════════
+//  ANIMATION HELPERS
+// ═══════════════════════════════════════════════════════════
+const eio = t => t < .5 ? 2*t*t : -1 + (4-2*t)*t;
+const eob = t => { const c=2.5; return 1 + c*Math.pow(t-1,3) + c*Math.pow(t-1,2); };
 
 function animKeys(keys, prop, from, to, dur, ef=eio) {
   return new Promise(resolve => {
-    const t0=performance.now();
+    const t0 = performance.now();
     const tick = now => {
-      const t=Math.min((now-t0)/dur,1), e=ef(t);
-      keys.forEach(k=>{ cellAnims[k]=cellAnims[k]||{}; cellAnims[k][prop]=from+(to-from)*e; });
+      const t = Math.min((now - t0) / dur, 1), e = ef(t);
+      keys.forEach(k => { cellAnims[k] = cellAnims[k] || {}; cellAnims[k][prop] = from + (to-from)*e; });
       drawGrid();
-      t<1 ? requestAnimationFrame(tick) : resolve();
+      t < 1 ? requestAnimationFrame(tick) : resolve();
     };
     requestAnimationFrame(tick);
   });
 }
 
-async function animSwap(r1,c1,r2,c2) {
-  const cs=G.cellSize, dx=(c2-c1)*cs, dy_=(r2-r1)*cs;
-  const k1=`${r1},${c1}`, k2=`${r2},${c2}`;
+async function animSwap(r1, c1, r2, c2) {
+  const cs = G.cellSize;
+  const dx = (c2-c1)*cs, dy = (r2-r1)*cs;
+  const k1 = `${r1},${c1}`, k2 = `${r2},${c2}`;
   await new Promise(resolve => {
-    const t0=performance.now(), dur=190;
+    const t0 = performance.now(), dur = 185;
     const tick = now => {
-      const t=Math.min((now-t0)/dur,1), e=eob(t);
-      cellAnims[k1]={dx:dx*e, dy:dy_*e};
-      cellAnims[k2]={dx:-dx*e, dy:-dy_*e};
+      const t = Math.min((now-t0)/dur, 1), e = eob(t);
+      cellAnims[k1] = { dx: dx*e,  dy: dy*e  };
+      cellAnims[k2] = { dx:-dx*e,  dy:-dy*e  };
       drawGrid();
-      t<1 ? requestAnimationFrame(tick) : resolve();
+      t < 1 ? requestAnimationFrame(tick) : resolve();
     };
     requestAnimationFrame(tick);
   });
@@ -351,188 +418,234 @@ async function animSwap(r1,c1,r2,c2) {
 }
 
 async function animPop(keys) {
-  await animKeys(keys, 'scale', 1, 1.38, 130, eob);
+  await animKeys(keys, 'scale', 1, 1.4, 125, eob);
   await new Promise(resolve => {
-    const t0=performance.now(), dur=160;
+    const t0 = performance.now(), dur = 155;
     const tick = now => {
-      const t=Math.min((now-t0)/dur,1);
-      keys.forEach(k=>{cellAnims[k]={scale:1.38*(1-t), alpha:1-t};});
-      drawGrid(); t<1?requestAnimationFrame(tick):resolve();
+      const t = Math.min((now-t0)/dur, 1);
+      keys.forEach(k => { cellAnims[k] = { scale: 1.4*(1-t), alpha: 1-t }; });
+      drawGrid(); t < 1 ? requestAnimationFrame(tick) : resolve();
     };
     requestAnimationFrame(tick);
   });
-  keys.forEach(k=>delete cellAnims[k]);
+  keys.forEach(k => delete cellAnims[k]);
 }
 
-// ─── VISUAL FX ────────────────────────────────────────────
-function canvasRect() { return activeCanvas.getBoundingClientRect(); }
+// ═══════════════════════════════════════════════════════════
+//  VISUAL FX
+//  BUG FIX: all position calculations are relative to the
+//  activePopLayer container (not the viewport) so elements
+//  appear exactly over the correct grid cell.
+// ═══════════════════════════════════════════════════════════
+function popLayerRect() { return activePopLayer.getBoundingClientRect(); }
+function canvasOffset()  {
+  // Returns the canvas origin relative to its pop layer container
+  const cRect = activeCanvas.getBoundingClientRect();
+  const lRect = popLayerRect();
+  return { x: cRect.left - lRect.left, y: cRect.top - lRect.top };
+}
+
+function cellCenter(r, c) {
+  const cs = G.cellSize;
+  const off = canvasOffset();
+  return { x: off.x + c*cs + cs/2, y: off.y + r*cs + cs/2 };
+}
 
 function spawnText(r, c, text, color='#f5c842', size=26) {
-  if(!G.opts.effects) return;
-  const rect=canvasRect(), cs=G.cellSize;
-  const el=document.createElement('div');
-  el.className='pop-text';
-  el.textContent=text;
-  el.style.cssText=`color:${color};font-size:${size}px;left:${rect.left+c*cs+cs/2-30}px;top:${rect.top+r*cs+cs*0.05}px;`;
+  if (!G.opts.effects) return;
+  const cs = G.cellSize;
+  const off = canvasOffset();
+  const x = off.x + c*cs + cs*0.1;
+  const y = off.y + r*cs + cs*0.05;
+  const el = document.createElement('div');
+  el.className = 'pop-text';
+  el.textContent = text;
+  el.style.cssText = `color:${color};font-size:${size}px;left:${x}px;top:${y}px;`;
   activePopLayer.appendChild(el);
-  el.addEventListener('animationend',()=>el.remove(),{once:true});
+  el.addEventListener('animationend', () => el.remove(), { once: true });
 }
 
-function spawnParticles(r,c,color,n=10) {
-  if(!G.opts.effects) return;
-  const rect=canvasRect(),cs=G.cellSize;
-  const px=rect.left+c*cs+cs/2, py=rect.top+r*cs+cs/2;
-  for(let i=0;i<n;i++){
-    const el=document.createElement('div');
-    el.className='particle';
-    const ang=(i/n)*Math.PI*2+Math.random()*0.4;
-    const dist=22+Math.random()*42, sz=3+Math.random()*7;
-    el.style.cssText=`width:${sz}px;height:${sz}px;background:${color};left:${px-sz/2}px;top:${py-sz/2}px;--dx:${Math.cos(ang)*dist}px;--dy:${Math.sin(ang)*dist}px;animation-duration:${0.4+Math.random()*0.35}s;`;
+function spawnParticles(r, c, color, n=10) {
+  if (!G.opts.effects) return;
+  const { x: px, y: py } = cellCenter(r, c);
+  for (let i = 0; i < n; i++) {
+    const el = document.createElement('div');
+    el.className = 'particle';
+    const ang = (i/n)*Math.PI*2 + Math.random()*0.4;
+    const dist = 20 + Math.random()*40, sz = 3 + Math.random()*7;
+    el.style.cssText = `
+      width:${sz}px; height:${sz}px; background:${color};
+      left:${px - sz/2}px; top:${py - sz/2}px;
+      --dx:${Math.cos(ang)*dist}px; --dy:${Math.sin(ang)*dist}px;
+      animation-duration:${0.38 + Math.random()*0.34}s;`;
     activePopLayer.appendChild(el);
-    el.addEventListener('animationend',()=>el.remove(),{once:true});
+    el.addEventListener('animationend', () => el.remove(), { once: true });
   }
 }
 
-function spawnSelectFX(r,c) {
-  if(!G.opts.effects) return;
-  const rect=canvasRect(),cs=G.cellSize;
-  const el=document.createElement('div');
-  el.className='fx-select';
-  el.style.cssText=`left:${rect.left+c*cs+4}px;top:${rect.top+r*cs+4}px;width:${cs-8}px;height:${cs-8}px;`;
+function spawnSelectFX(r, c) {
+  if (!G.opts.effects) return;
+  const cs = G.cellSize;
+  const off = canvasOffset();
+  const el = document.createElement('div');
+  el.className = 'fx-select';
+  el.style.cssText = `
+    left:${off.x + c*cs + 4}px; top:${off.y + r*cs + 4}px;
+    width:${cs-8}px; height:${cs-8}px;`;
   activePopLayer.appendChild(el);
-  setTimeout(()=>el.remove(),280);
+  setTimeout(() => el.remove(), 300);
 }
 
-function spawnDeselectFX(r,c) {
-  if(!G.opts.effects) return;
-  const rect=canvasRect(),cs=G.cellSize;
-  const el=document.createElement('div');
-  el.className='fx-deselect';
-  el.style.cssText=`left:${rect.left+c*cs+4}px;top:${rect.top+r*cs+4}px;width:${cs-8}px;height:${cs-8}px;`;
+function spawnDeselectFX(r, c) {
+  if (!G.opts.effects) return;
+  const cs = G.cellSize;
+  const off = canvasOffset();
+  const el = document.createElement('div');
+  el.className = 'fx-deselect';
+  el.style.cssText = `
+    left:${off.x + c*cs + 4}px; top:${off.y + r*cs + 4}px;
+    width:${cs-8}px; height:${cs-8}px;`;
   activePopLayer.appendChild(el);
-  setTimeout(()=>el.remove(),250);
+  setTimeout(() => el.remove(), 260);
 }
 
 function screenFlash(color='rgba(111,207,63,0.2)') {
-  if(!G.opts.effects) return;
-  const el=document.createElement('div');
-  el.className='fx-screen-flash'; el.style.background=color;
+  if (!G.opts.effects) return;
+  const el = document.createElement('div');
+  el.className = 'fx-screen-flash';
+  el.style.background = color;
   document.body.appendChild(el);
-  el.addEventListener('animationend',()=>el.remove(),{once:true});
+  el.addEventListener('animationend', () => el.remove(), { once: true });
 }
 
 // ═══════════════════════════════════════════════════════════
 //  MATCH CASCADE ENGINE
 // ═══════════════════════════════════════════════════════════
 async function processMatches() {
-  while(true) {
+  while (true) {
     const matched = findMatches(G.grid);
-    if(!matched.size) break;
+    if (!matched.size) break;
+
     G.combo++;
-    if(G.combo > G.maxCombo) G.maxCombo = G.combo;
+    if (G.combo > G.maxCombo) G.maxCombo = G.combo;
 
     const cells = [...matched];
-    const types = cells.map(k=>{ const[r,c]=k.split(',').map(Number); return G.grid[r][c]; });
+    const types = cells.map(k => {
+      const [r,c] = k.split(',').map(Number);
+      return G.grid[r][c];
+    });
 
     await animPop(cells);
 
     const pts = Math.floor(matched.size * 10 * Math.pow(G.combo, 1.45));
-    G.score   += pts;
-    G.cleared += matched.size;
-    G.totalCleared += matched.size;
+    G.score         += pts;
+    G.cleared       += matched.size;
+    G.totalCleared  += matched.size;
 
-    cells.forEach((k,i) => {
-      const[r,c]=k.split(',').map(Number);
-      spawnParticles(r,c, NUG_COLORS[types[i]]||'#fff', 9);
-      G.grid[r][c]=null;
-      // Highlight strain in sidebar
+    // Clear matched cells from grid, spawn effects
+    cells.forEach((k, i) => {
+      const [r,c] = k.split(',').map(Number);
+      spawnParticles(r, c, NUG_COLORS[types[i]] || '#aaffaa', 9);
+      G.grid[r][c] = null;
       highlightStrain(types[i]);
     });
 
     SFX.pop(matched.size);
-    if(matched.size>=6){ setTimeout(()=>SFX.bigClear(),60); screenFlash('rgba(111,207,63,0.2)'); }
-    if(G.combo>=2){ setTimeout(()=>SFX.combo(G.combo),80); vib([30,20,55]); }
+    if (matched.size >= 6) { setTimeout(() => SFX.bigClear(), 60); screenFlash('rgba(111,207,63,0.18)'); }
+    if (G.combo >= 2) { setTimeout(() => SFX.combo(G.combo), 80); vib([30,20,55]); }
     else vib(30);
 
-    // Pop texts
-    const mid = cells[Math.floor(cells.length/2)].split(',').map(Number);
-    if(G.combo>=2) {
-      const label = COMBO_LABELS[Math.min(G.combo-2,COMBO_LABELS.length-1)];
-      spawnText(mid[0]-1, mid[1], `${G.combo}x ${label}`, '#f5c842', 22);
-      screenFlash('rgba(245,200,66,0.1)');
+    // Pop text over middle cell
+    const midKey = cells[Math.floor(cells.length / 2)];
+    const [mr, mc] = midKey.split(',').map(Number);
+    if (G.combo >= 2) {
+      const label = COMBO_LABELS[Math.min(G.combo - 2, COMBO_LABELS.length - 1)];
+      spawnText(mr - 1, mc, `${G.combo}x ${label}`, '#f5c842', 22);
+      screenFlash('rgba(245,200,66,0.09)');
     }
-    spawnText(mid[0], mid[1]+1, `+${pts}`, '#9ee060', 17);
+    spawnText(mr, mc + 1, `+${pts}`, '#9ee060', 18);
 
     updateHUD();
     await sleep(110);
     gravity(G.grid);
-    await sleep(95);
+    await sleep(90);
   }
 }
 
 function highlightStrain(type) {
   document.querySelectorAll('.strain-item').forEach(el => {
-    if(el.dataset.type===type) {
+    if (el.dataset.type === type) {
       el.classList.add('active-match');
-      setTimeout(()=>el.classList.remove('active-match'), 600);
+      setTimeout(() => el.classList.remove('active-match'), 620);
     }
   });
 }
 
-const sleep = ms => new Promise(r=>setTimeout(r,ms));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // ═══════════════════════════════════════════════════════════
 //  HUD UPDATES
 // ═══════════════════════════════════════════════════════════
 function updateHUD() {
-  const sc = G.score.toLocaleString();
+  const sc  = G.score.toLocaleString();
   const bst = (highScores[0]?.score || 0).toLocaleString();
-  const pct = Math.min(G.cleared/G.goal,1)*100;
+  const pct = Math.min(G.cleared / G.goal, 1) * 100;
 
-  // Desktop HUD
+  // ── Desktop HUD ──
   setEl('d-score', sc, true);
   setEl('d-best',  bst);
   setEl('d-level', G.level);
   setEl('d-moves', G.moves);
-  const dp=$('d-progress'); if(dp) dp.style.width=pct+'%';
+  const dp = $('d-progress'); if (dp) dp.style.width = pct + '%';
   setEl('d-progress-label', `${G.cleared} / ${G.goal}`);
-  setEl('d-maxcombo', G.maxCombo+'x');
+  setEl('d-maxcombo', G.maxCombo + 'x');
   setEl('d-cleared', G.totalCleared);
-  const dc=$('d-combo');
-  if(dc){ dc.textContent=G.combo>=2?`${G.combo}x`:''; dc.classList.remove('pop'); void dc.offsetWidth; if(G.combo>=2) dc.classList.add('pop'); }
-  // Low puffs warning
-  const puffsEl=$('d-moves');
-  if(puffsEl) puffsEl.classList.toggle('low', G.moves<=5);
 
-  // Mobile HUD
+  const dc = $('d-combo');
+  if (dc) {
+    dc.textContent = G.combo >= 2 ? `${G.combo}x` : '';
+    dc.classList.remove('pop'); void dc.offsetWidth;
+    if (G.combo >= 2) dc.classList.add('pop');
+  }
+  const dMovesEl = $('d-moves');
+  if (dMovesEl) dMovesEl.classList.toggle('low', G.moves <= 5);
+
+  // ── Mobile HUD ──
   setEl('m-score', sc, true);
   setEl('m-best',  bst);
   setEl('m-level', G.level);
   setEl('m-moves', G.moves);
-  const mp=$('m-progress'); if(mp) mp.style.width=pct+'%';
+  const mp = $('m-progress'); if (mp) mp.style.width = pct + '%';
   setEl('m-progress-label', `${G.cleared} / ${G.goal}`);
-  const mc=$('m-combo');
-  if(mc){ mc.textContent=G.combo>=2?`${G.combo}x`:''; mc.classList.remove('pop'); void mc.offsetWidth; if(G.combo>=2) mc.classList.add('pop'); }
-  // Mobile low puffs
-  const mPuffsWrap=document.querySelector('.mfhud-puffs');
-  if(mPuffsWrap) mPuffsWrap.classList.toggle('low', G.moves<=5);
-  if(G.moves===5) SFX.lowPuffs();
+
+  const mc = $('m-combo');
+  if (mc) {
+    mc.textContent = G.combo >= 2 ? `${G.combo}x` : '';
+    mc.classList.remove('pop'); void mc.offsetWidth;
+    if (G.combo >= 2) mc.classList.add('pop');
+  }
+  const mPuffsWrap = document.querySelector('.mfhud-puffs');
+  if (mPuffsWrap) mPuffsWrap.classList.toggle('low', G.moves <= 5);
+
+  // Fire lowPuffs SFX only on the move that crosses to exactly 5
+  if (G.moves === 5 && _prevMoves > 5) SFX.lowPuffs();
+  _prevMoves = G.moves;
 }
 
 function setEl(id, val, bump=false) {
-  const el=$(id); if(!el) return;
+  const el = $(id); if (!el) return;
   el.textContent = val;
-  if(bump){ el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
+  if (bump) { el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
 }
 
 function updateNextDisplay() {
   ['d-next','m-next'].forEach(id => {
-    const el=$(id); if(!el) return;
-    el.innerHTML='';
-    G.nextNugs.slice(0,3).forEach(type=>{
-      const img=document.createElement('img');
-      img.src=`sprites/${type}.png`; img.alt=type;
-      img.onerror=()=>img.style.display='none';
+    const el = $(id); if (!el) return;
+    el.innerHTML = '';
+    (G.nextNugs || []).slice(0, 3).forEach(type => {
+      const img = document.createElement('img');
+      img.src = `sprites/${type}.png`; img.alt = type;
+      img.onerror = () => img.style.display = 'none';
       el.appendChild(img);
     });
   });
@@ -542,278 +655,475 @@ function updateNextDisplay() {
 //  GAME FLOW
 // ═══════════════════════════════════════════════════════════
 function newGame() {
-  G.grid=createGrid(); G.score=0; G.level=1; G.moves=30;
-  G.goal=LEVEL_GOALS[0]; G.cleared=0; G.totalCleared=0;
-  G.combo=0; G.maxCombo=0; G.running=true;
-  G.selected=null; G.animating=false;
-  cellAnims={};
-  G.nextNugs=Array.from({length:9},()=>randNug());
-  G.cellSize=calcCellSize();
+  G.grid         = createGrid();
+  G.score        = 0;
+  G.level        = 1;
+  G.moves        = 30;
+  G.goal         = LEVEL_GOALS[0];
+  G.cleared      = 0;
+  G.totalCleared = 0;
+  G.combo        = 0;
+  G.maxCombo     = 0;
+  G.running      = true;
+  G.selected     = null;
+  G.animating    = false;
+  G.nextNugs     = Array.from({ length: 9 }, () => randNug());
+  cellAnims      = {};
+  _prevMoves     = 30;
+
+  G.cellSize = calcCellSize();
   setActiveCanvas();
   resizeCanvas();
-  updateHUD(); updateNextDisplay(); drawGrid();
+  updateHUD();
+  updateNextDisplay();
+  drawGrid();
   showScreen('game');
-  SFX.newGame(); vib([20,10,40,10,70]);
+  SFX.newGame();
+  vib([20,10,40,10,70]);
 }
 
-async function doSwap(r1,c1,r2,c2) {
-  if(G.animating||!G.running) return;
-  G.animating=true; G.combo=0;
-  spawnDeselectFX(r1,c1); G.selected=null;
+async function doSwap(r1, c1, r2, c2) {
+  if (G.animating || !G.running) return;
+  G.animating = true;
+  G.combo = 0;
+  spawnDeselectFX(r1, c1);
+  G.selected = null;
 
-  swapCells(G.grid,r1,c1,r2,c2);
+  swapCells(G.grid, r1, c1, r2, c2);
   SFX.swap(); vib(15);
-  await animSwap(r1,c1,r2,c2);
+  await animSwap(r1, c1, r2, c2);
 
-  if(!findMatches(G.grid).size) {
-    swapCells(G.grid,r1,c1,r2,c2);
+  // Check if swap produces any match
+  if (!findMatches(G.grid).size) {
+    // No match — reverse
+    swapCells(G.grid, r1, c1, r2, c2);
     SFX.invalid(); vib([20,20,20]);
-    await animSwap(r1,c1,r2,c2);
-    drawGrid(); G.animating=false; return;
+    await animSwap(r1, c1, r2, c2);
+    drawGrid();
+    G.animating = false;
+    return;
   }
 
   G.moves--;
   await processMatches();
   drawGrid();
 
-  if(G.cleared>=G.goal) { await doLevelUp(); }
-  else if(G.moves<=0)   { doGameOver(); }
-  else if(!hasMove(G.grid)) {
-    spawnText(4,2,'🔀 SHUFFLE!','#5ecfc8',22);
-    SFX.shuffle(); await sleep(650);
-    G.grid=createGrid(); drawGrid();
+  // Post-cascade checks (level-up takes priority over game-over)
+  if (G.cleared >= G.goal) {
+    await doLevelUp();
+  } else if (G.moves <= 0) {
+    doGameOver();
+    return; // doGameOver sets running=false; no further processing
+  } else if (!hasMove(G.grid)) {
+    spawnText(4, 2, '🔀 SHUFFLE!', '#5ecfc8', 22);
+    SFX.shuffle();
+    await sleep(640);
+    G.grid = createGrid();
+    drawGrid();
   }
 
-  saveGame(); G.animating=false;
-  G.nextNugs.shift(); G.nextNugs.push(randNug());
+  saveGame();
+  G.animating = false;
+  G.nextNugs.shift();
+  G.nextNugs.push(randNug());
   updateNextDisplay();
 }
 
 async function doLevelUp() {
-  SFX.levelUp(); vib([50,30,100,30,160]);
-  screenFlash('rgba(245,200,66,0.3)');
-  G.level++; G.cleared=0;
-  G.goal  = LEVEL_GOALS[Math.min(G.level-1,LEVEL_GOALS.length-1)];
-  G.moves = Math.min(G.moves+12, 48);
+  // Guard: prevent double-trigger from rapid taps on btnContinue
+  G.running = false;
+
+  SFX.levelUp();
+  vib([50,30,100,30,160]);
+  screenFlash('rgba(245,200,66,0.32)');
+
+  G.level++;
+  G.cleared = 0;
+  G.goal    = LEVEL_GOALS[Math.min(G.level - 1, LEVEL_GOALS.length - 1)];
+  G.moves   = Math.min(G.moves + 12, 48);
+  _prevMoves = G.moves; // reset warning tracker after puff refill
+
   $('luLevel').textContent = G.level;
-  $('luMsg').textContent   = LEVEL_MSGS[Math.min(G.level-2,LEVEL_MSGS.length-1)];
-  $('luStars').textContent = G.level>=8?'🌟🌟🌟':G.level>=5?'⭐🌟⭐':'⭐⭐⭐';
+  $('luMsg').textContent   = LEVEL_MSGS[Math.min(G.level - 2, LEVEL_MSGS.length - 1)];
+  $('luStars').textContent = G.level >= 8 ? '🌟🌟🌟' : G.level >= 5 ? '⭐🌟⭐' : '⭐⭐⭐';
+
   showScreen('levelup');
-  await new Promise(res=>{ $('btnContinue').onclick=()=>{ showScreen('game'); resizeCanvas(); drawGrid(); res(); }; });
+
+  // Wait for player to tap Continue — one-shot handler with guard
+  await new Promise(resolve => {
+    const btn = $('btnContinue');
+    const handler = () => {
+      btn.removeEventListener('click', handler);
+      showScreen('game');
+      G.running = true;
+      resizeCanvas();
+      drawGrid();
+      resolve();
+    };
+    btn.addEventListener('click', handler);
+  });
 }
 
 function doGameOver() {
-  G.running=false;
-  SFX.gameOver(); vib([30,20,30,20,100]);
-  addHighScore(G.score,G.level);
-  $('goScore').textContent  = G.score.toLocaleString();
-  $('goLevel').textContent  = G.level;
-  $('goCombo').textContent  = G.maxCombo+'x';
-  $('goCleared').textContent= G.totalCleared;
-  const isNew = G.score>0 && highScores[0]?.score===G.score;
-  const nb=$('goNewBest'); if(nb) nb.style.display=isNew?'block':'none';
-  if(isNew){ SFX.levelUp(); screenFlash('rgba(245,200,66,0.45)'); }
+  G.running   = false;
+  G.animating = false;
+
+  SFX.gameOver();
+  vib([30,20,30,20,100]);
+
+  // Check if this is a new high score BEFORE adding
+  const prevBest = highScores[0]?.score ?? 0;
+  addHighScore(G.score, G.level);
+  const isNew = G.score > 0 && G.score >= prevBest;
+
+  $('goScore').textContent   = G.score.toLocaleString();
+  $('goLevel').textContent   = G.level;
+  $('goCombo').textContent   = G.maxCombo + 'x';
+  $('goCleared').textContent = G.totalCleared;
+
+  const nb = $('goNewBest');
+  if (nb) nb.style.display = isNew ? 'block' : 'none';
+  if (isNew) { SFX.levelUp(); screenFlash('rgba(245,200,66,0.45)'); }
+
   showScreen('gameover');
 }
 
-// ─── SAVE/LOAD ────────────────────────────────────────────
+// ─── SAVE / LOAD ──────────────────────────────────────────
 function saveGame() {
-  savedGame=JSON.parse(JSON.stringify(G));
-  try{localStorage.setItem('nugz3_save',JSON.stringify(savedGame));}catch(e){}
+  savedGame = JSON.parse(JSON.stringify(G));
+  try { localStorage.setItem('nugz_save', JSON.stringify(savedGame)); } catch(e){}
 }
+
 function loadSave() {
-  try{const s=localStorage.getItem('nugz3_save');if(s)savedGame=JSON.parse(s);}catch(e){}
+  try {
+    const s = localStorage.getItem('nugz_save');
+    if (s) savedGame = JSON.parse(s);
+  } catch(e) {}
   return savedGame;
 }
-function loadScores(){try{highScores=JSON.parse(localStorage.getItem('nugz3_scores')||'[]');}catch(e){highScores=[];}}
-function saveScores(){try{localStorage.setItem('nugz3_scores',JSON.stringify(highScores));}catch(e){}}
-function addHighScore(score,level){highScores.push({score,level});highScores.sort((a,b)=>b.score-a.score);highScores=highScores.slice(0,10);saveScores();}
+
+function validateSave(save) {
+  // Must have a valid grid and nextNugs; if corrupt, return false
+  if (!save) return false;
+  if (!Array.isArray(save.grid) || save.grid.length !== ROWS) return false;
+  for (let r = 0; r < ROWS; r++) {
+    if (!Array.isArray(save.grid[r]) || save.grid[r].length !== COLS) return false;
+    for (let c = 0; c < COLS; c++) {
+      if (!NUG_TYPES.includes(save.grid[r][c])) return false;
+    }
+  }
+  if (!Array.isArray(save.nextNugs) || save.nextNugs.length === 0) return false;
+  return true;
+}
+
+function loadScores() {
+  try { highScores = JSON.parse(localStorage.getItem('nugz_scores') || '[]'); }
+  catch(e) { highScores = []; }
+}
+function saveScores() {
+  try { localStorage.setItem('nugz_scores', JSON.stringify(highScores)); } catch(e){}
+}
+function addHighScore(score, level) {
+  highScores.push({ score, level });
+  highScores.sort((a,b) => b.score - a.score);
+  highScores = highScores.slice(0, 10);
+  saveScores();
+}
+
 function renderScores() {
-  const medals=['🥇','🥈','🥉'];
-  $('scoresList').innerHTML=!highScores.length
-    ?'<div style="text-align:center;color:rgba(255,255,255,0.3);padding:28px 0">No scores yet!<br>Play a game first 🌿</div>'
-    :highScores.map((s,i)=>`<div class="score-entry"><span class="score-rank">${medals[i]||'#'+(i+1)}</span><span class="score-val">${s.score.toLocaleString()}</span><span class="score-lvl">LVL ${s.level}</span></div>`).join('');
+  const medals = ['🥇','🥈','🥉'];
+  $('scoresList').innerHTML = !highScores.length
+    ? '<div style="text-align:center;color:rgba(255,255,255,0.3);padding:28px 0">No scores yet!<br>Play a game first 🌿</div>'
+    : highScores.map((s,i) =>
+        `<div class="score-entry">
+          <span class="score-rank">${medals[i] || '#'+(i+1)}</span>
+          <span class="score-val">${s.score.toLocaleString()}</span>
+          <span class="score-lvl">LVL ${s.level}</span>
+        </div>`
+      ).join('');
 }
 
 // ═══════════════════════════════════════════════════════════
-//  INPUT
+//  INPUT — CANVAS (click, touch, swipe)
 // ═══════════════════════════════════════════════════════════
-function cellAt(clientX,clientY) {
-  const rect=canvasRect(),cs=G.cellSize;
-  const c=Math.floor((clientX-rect.left)/cs), r=Math.floor((clientY-rect.top)/cs);
-  return (r>=0&&r<ROWS&&c>=0&&c<COLS)?[r,c]:null;
+function cellAt(clientX, clientY) {
+  const rect = activeCanvas.getBoundingClientRect();
+  const cs   = G.cellSize;
+  const c = Math.floor((clientX - rect.left)  / cs);
+  const r = Math.floor((clientY - rect.top)   / cs);
+  return (r >= 0 && r < ROWS && c >= 0 && c < COLS) ? [r, c] : null;
 }
 
-function tapCell(r,c) {
-  if(G.animating||!G.running) return;
-  if(!G.selected) {
-    G.selected=[r,c]; SFX.select(); spawnSelectFX(r,c); vib(14); drawGrid();
+function tapCell(r, c) {
+  if (G.animating || !G.running) return;
+  if (!G.selected) {
+    G.selected = [r, c];
+    SFX.select();
+    spawnSelectFX(r, c);
+    vib(14);
+    drawGrid();
   } else {
-    const[sr,sc]=G.selected;
-    if(sr===r&&sc===c){ spawnDeselectFX(r,c); G.selected=null; SFX.deselect(); drawGrid(); }
-    else if(isAdj(sr,sc,r,c)){ doSwap(sr,sc,r,c); }
-    else { spawnDeselectFX(sr,sc); spawnSelectFX(r,c); G.selected=[r,c]; SFX.select(); vib(12); drawGrid(); }
+    const [sr, sc] = G.selected;
+    if (sr === r && sc === c) {
+      spawnDeselectFX(r, c);
+      G.selected = null;
+      SFX.deselect();
+      drawGrid();
+    } else if (isAdj(sr, sc, r, c)) {
+      doSwap(sr, sc, r, c);
+    } else {
+      // Re-select new cell
+      spawnDeselectFX(sr, sc);
+      spawnSelectFX(r, c);
+      G.selected = [r, c];
+      SFX.select();
+      vib(12);
+      drawGrid();
+    }
   }
 }
 
-let touchOrig=null;
+let _touchStart = null;
+
 function setupCanvasInput(cvs) {
-  cvs.addEventListener('touchstart',e=>{
-    e.preventDefault(); resumeAC();
-    const t=e.touches[0]; touchOrig={x:t.clientX,y:t.clientY};
-    const pos=cellAt(t.clientX,t.clientY); if(pos) tapCell(...pos);
-  },{passive:false});
-  cvs.addEventListener('touchend',e=>{
+  cvs.addEventListener('touchstart', e => {
     e.preventDefault();
-    if(!touchOrig||!G.selected||G.animating){touchOrig=null;return;}
-    const t=e.changedTouches[0];
-    const dx=t.clientX-touchOrig.x, dy=t.clientY-touchOrig.y;
-    if(Math.sqrt(dx*dx+dy*dy)>24) {
-      const[sr,sc]=G.selected;
-      let tr=sr,tc=sc;
-      if(Math.abs(dx)>Math.abs(dy)) tc+=dx>0?1:-1; else tr+=dy>0?1:-1;
-      if(tr>=0&&tr<ROWS&&tc>=0&&tc<COLS) doSwap(sr,sc,tr,tc);
-    }
-    touchOrig=null;
-  },{passive:false});
-  cvs.addEventListener('mousedown',e=>{
     resumeAC();
-    const pos=cellAt(e.clientX,e.clientY); if(pos) tapCell(...pos);
+    const t = e.touches[0];
+    _touchStart = { x: t.clientX, y: t.clientY };
+    const pos = cellAt(t.clientX, t.clientY);
+    if (pos) tapCell(...pos);
+  }, { passive: false });
+
+  cvs.addEventListener('touchend', e => {
+    e.preventDefault();
+    if (!_touchStart || !G.selected || G.animating) { _touchStart = null; return; }
+    const t   = e.changedTouches[0];
+    const dx  = t.clientX - _touchStart.x;
+    const dy  = t.clientY - _touchStart.y;
+    _touchStart = null;
+    if (Math.sqrt(dx*dx + dy*dy) > 22) {
+      // Swipe gesture — move in dominant direction from selected cell
+      const [sr, sc] = G.selected;
+      let tr = sr, tc = sc;
+      if (Math.abs(dx) > Math.abs(dy)) tc += dx > 0 ? 1 : -1;
+      else                              tr += dy > 0 ? 1 : -1;
+      if (tr >= 0 && tr < ROWS && tc >= 0 && tc < COLS) doSwap(sr, sc, tr, tc);
+    }
+  }, { passive: false });
+
+  cvs.addEventListener('mousedown', e => {
+    resumeAC();
+    const pos = cellAt(e.clientX, e.clientY);
+    if (pos) tapCell(...pos);
   });
 }
+
 setupCanvasInput(desktopCanvas);
 setupCanvasInput(mobileCanvas);
 
-// Keyboard
-document.addEventListener('keydown',e=>{
-  if(!G.selected||G.animating||!G.running) return;
-  const[sr,sc]=G.selected;
-  const dirs={ArrowUp:[-1,0],ArrowDown:[1,0],ArrowLeft:[0,-1],ArrowRight:[0,1]};
-  if(dirs[e.key]){e.preventDefault();const[dr,dc]=dirs[e.key];const tr=sr+dr,tc=sc+dc;if(tr>=0&&tr<ROWS&&tc>=0&&tc<COLS)doSwap(sr,sc,tr,tc);}
-  if(e.key==='Escape'){spawnDeselectFX(sr,sc);G.selected=null;SFX.deselect();drawGrid();}
+// Keyboard navigation
+document.addEventListener('keydown', e => {
+  if (!G.selected || G.animating || !G.running) return;
+  const [sr, sc] = G.selected;
+  const dirs = { ArrowUp:[-1,0], ArrowDown:[1,0], ArrowLeft:[0,-1], ArrowRight:[0,1] };
+  if (dirs[e.key]) {
+    e.preventDefault();
+    const [dr, dc] = dirs[e.key];
+    const tr = sr+dr, tc = sc+dc;
+    if (tr >= 0 && tr < ROWS && tc >= 0 && tc < COLS) doSwap(sr, sc, tr, tc);
+  }
+  if (e.key === 'Escape') {
+    spawnDeselectFX(sr, sc);
+    G.selected = null;
+    SFX.deselect();
+    drawGrid();
+  }
 });
 
 // ═══════════════════════════════════════════════════════════
-//  MENU NUGS
+//  MENU NUG DECORATION
 // ═══════════════════════════════════════════════════════════
 function initMenuNugs() {
   // Desktop showcase
-  const showcase=$('nugShowcase');
-  if(showcase) {
-    showcase.innerHTML='';
-    NUG_TYPES.forEach((type,i)=>{
-      const wrap=document.createElement('div'); wrap.className='nug-item';
-      const img=document.createElement('img'); img.src=`sprites/${type}.png`; img.alt=type;
-      img.style.setProperty('--dur',(3.2+i*0.4)+'s');
-      img.style.setProperty('--del',(i*0.5)+'s');
-      img.onerror=()=>img.style.display='none';
-      const lbl=document.createElement('div'); lbl.className='nug-label'; lbl.textContent=NUG_STRAINS[i];
+  const showcase = $('nugShowcase');
+  if (showcase) {
+    showcase.innerHTML = '';
+    NUG_TYPES.forEach((type, i) => {
+      const wrap = document.createElement('div'); wrap.className = 'nug-item';
+      const img  = document.createElement('img');
+      img.src = `sprites/${type}.png`; img.alt = type;
+      img.style.setProperty('--dur', (3.2 + i * 0.4) + 's');
+      img.style.setProperty('--del', (i   * 0.50)    + 's');
+      img.onerror = () => img.style.display = 'none';
+      const lbl  = document.createElement('div'); lbl.className = 'nug-label';
+      lbl.textContent = NUG_STRAINS[i];
       wrap.appendChild(img); wrap.appendChild(lbl);
       showcase.appendChild(wrap);
     });
   }
-  // Mobile row
-  const mrow=$('mobileNugsRow');
-  if(mrow) {
-    mrow.innerHTML='';
-    NUG_TYPES.forEach((type,i)=>{
-      const img=document.createElement('img'); img.src=`sprites/${type}.png`; img.alt=type;
-      img.style.setProperty('--dur',(3+i*0.5)+'s');
-      img.style.setProperty('--del',(i*0.45)+'s');
-      img.onerror=()=>img.style.display='none';
+
+  // Mobile nugs row
+  const mrow = $('mobileNugsRow');
+  if (mrow) {
+    mrow.innerHTML = '';
+    NUG_TYPES.forEach((type, i) => {
+      const img = document.createElement('img');
+      img.src = `sprites/${type}.png`; img.alt = type;
+      img.style.setProperty('--dur', (3.0 + i * 0.5) + 's');
+      img.style.setProperty('--del', (i   * 0.45)    + 's');
+      img.onerror = () => img.style.display = 'none';
       mrow.appendChild(img);
     });
   }
 }
 
-// Sparkle timer for mobile nugs
-setInterval(()=>{
-  const imgs=document.querySelectorAll('#mobileNugsRow img');
-  if(!imgs.length) return;
-  const img=imgs[Math.floor(Math.random()*imgs.length)];
+// Random sparkle on mobile nug row
+setInterval(() => {
+  const imgs = document.querySelectorAll('#mobileNugsRow img');
+  if (!imgs.length) return;
+  const img = imgs[Math.floor(Math.random() * imgs.length)];
   img.classList.add('sparkle');
-  setTimeout(()=>img.classList.remove('sparkle'),380);
-},750);
+  setTimeout(() => img.classList.remove('sparkle'), 380);
+}, 760);
 
 // ═══════════════════════════════════════════════════════════
-//  BUTTON WIRING  (wire to all matching IDs)
+//  BUTTON WIRING
 // ═══════════════════════════════════════════════════════════
 function on(ids, fn) {
-  (Array.isArray(ids)?ids:[ids]).forEach(id=>{ const el=$(id); if(el) el.addEventListener('click',fn); });
+  (Array.isArray(ids) ? ids : [ids]).forEach(id => {
+    const el = $(id); if (el) el.addEventListener('click', fn);
+  });
 }
 
-on(['btnNewGame-d','btnNewGame-m'],()=>{ resumeAC(); newGame(); });
+// New Game
+on(['btnNewGame-d','btnNewGame-m'], () => { resumeAC(); newGame(); });
 
-on(['btnResume-d','btnResume-m'],()=>{
+// Resume
+on(['btnResume-d','btnResume-m'], () => {
   resumeAC();
-  const save=loadSave();
-  if(save?.grid&&save.running!==false) {
-    Object.assign(G,save); G.running=true; G.animating=false; cellAnims={};
-    G.cellSize=calcCellSize(); setActiveCanvas(); resizeCanvas();
-    updateHUD(); updateNextDisplay(); drawGrid(); showScreen('game'); SFX.select();
+  const save = loadSave();
+  if (validateSave(save) && save.running !== false) {
+    // Preserve current opts — only restore gameplay state
+    const currentOpts = { ...G.opts };
+    Object.assign(G, save);
+    G.opts      = currentOpts;   // ← FIX: don't restore stale opts from save
+    G.running   = true;
+    G.animating = false;
+    cellAnims   = {};
+    _prevMoves  = G.moves;
+
+    G.cellSize = calcCellSize();
+    setActiveCanvas();
+    resizeCanvas();
+    updateHUD();
+    updateNextDisplay();
+    drawGrid();
+    showScreen('game');
+    SFX.select();
   } else {
-    ['btnResume-d','btnResume-m'].forEach(id=>{
-      const b=$(id); if(!b) return;
-      const orig=b.textContent; b.textContent='❌ NO SAVE'; b.style.opacity='0.5';
+    // Show "no save" feedback briefly
+    ['btnResume-d','btnResume-m'].forEach(id => {
+      const b = $(id); if (!b) return;
+      const orig = b.innerHTML;
+      b.innerHTML = b.classList.contains('mbtn')
+        ? '❌ NO SAVE'
+        : '<span class="btn-icon">❌</span><span class="btn-label">NO SAVE</span>';
+      b.style.opacity = '0.55';
       SFX.invalid();
-      setTimeout(()=>{b.textContent=orig;b.style.opacity='';},2000);
+      setTimeout(() => { b.innerHTML = orig; b.style.opacity = ''; }, 2000);
     });
   }
 });
 
-on(['btnHighScore-d','btnHighScore-m'],()=>{ renderScores(); showScreen('scores'); SFX.select(); });
-on('btnScoresBack',()=>{ showScreen('menu'); SFX.deselect(); });
+// High Scores
+on(['btnHighScore-d','btnHighScore-m'], () => { renderScores(); showScreen('scores'); SFX.select(); });
+on('btnScoresBack', () => { showScreen('menu'); SFX.deselect(); });
 
-on(['btnOptions-d','btnOptions-m'],()=>{ syncOpts(); showScreen('options'); SFX.select(); });
-on('btnOptBack',()=>{
-  G.opts.sound   =$('optSound').checked;
-  G.opts.music   =$('optMusic').checked;
-  G.opts.vibrate =$('optVibrate').checked;
-  G.opts.effects =$('optEffects').checked;
-  G.opts.musicVol=parseInt($('optMusicVol').value)/100;
-  if(bgMusic) bgMusic.volume=G.opts.musicVol;
+// Options
+on(['btnOptions-d','btnOptions-m'], () => { syncOpts(); showScreen('options'); SFX.select(); });
+on('btnOptBack', () => {
+  G.opts.sound    = $('optSound').checked;
+  G.opts.music    = $('optMusic').checked;
+  G.opts.vibrate  = $('optVibrate').checked;
+  G.opts.effects  = $('optEffects').checked;
+  G.opts.musicVol = parseInt($('optMusicVol').value) / 100;
+  if (bgMusic) bgMusic.volume = G.opts.musicVol;
   toggleMusic(G.opts.music);
-  showScreen('menu'); SFX.deselect();
+  showScreen('menu');
+  SFX.deselect();
 });
-$('optMusic')?.addEventListener('change',e=>{ resumeAC(); toggleMusic(e.target.checked); });
-$('optMusicVol')?.addEventListener('input',e=>{ G.opts.musicVol=parseInt(e.target.value)/100; if(bgMusic)bgMusic.volume=G.opts.musicVol; });
+$('optMusic')?.addEventListener('change', e => { resumeAC(); toggleMusic(e.target.checked); });
+$('optMusicVol')?.addEventListener('input', e => {
+  G.opts.musicVol = parseInt(e.target.value) / 100;
+  if (bgMusic) bgMusic.volume = G.opts.musicVol;
+});
 
-on(['btnQuit-d','btnQuit-m'],()=>{ resumeAC(); if(confirm('Quit NUGZ? 🌿')){saveGame();window.close();} });
-on(['btnPause-d','btnPause-m2'],()=>{ G.running=false; showScreen('pause'); });
-on('btnResumePause',()=>{ G.running=true; showScreen('game'); SFX.select(); });
-on('btnRestartPause',()=>{ if(confirm('Start a new game?')) newGame(); });
-on('btnMenuPause',()=>{ saveGame(); showScreen('menu'); });
-on('btnPlayAgain',()=>{ resumeAC(); newGame(); });
-on('btnGoMenu',()=>{ showScreen('menu'); });
+// Quit
+on(['btnQuit-d','btnQuit-m'], () => {
+  resumeAC();
+  if (confirm('Quit NUGZ? 🌿')) { saveGame(); window.close(); }
+});
 
-// ─── RESIZE ───────────────────────────────────────────────
-window.addEventListener('resize',()=>{
-  if($('screen-game')?.classList.contains('active')) {
-    G.cellSize=calcCellSize(); setActiveCanvas(); resizeCanvas(); drawGrid();
+// Pause
+on(['btnPause-d','btnPause-m2'], () => { G.running = false; showScreen('pause'); });
+on('btnResumePause',  () => { G.running = true; showScreen('game'); SFX.select(); });
+on('btnRestartPause', () => { if (confirm('Start a new game?')) newGame(); });
+on('btnMenuPause',    () => { saveGame(); G.animating = false; showScreen('menu'); });
+
+// Game over
+on('btnPlayAgain', () => { resumeAC(); newGame(); });
+on('btnGoMenu',    () => { showScreen('menu'); });
+
+// ─── RESIZE HANDLER ───────────────────────────────────────
+window.addEventListener('resize', () => {
+  if ($('screen-game')?.classList.contains('active')) {
+    G.cellSize = calcCellSize();
+    setActiveCanvas();
+    resizeCanvas();
+    drawGrid();
   }
 });
 
+// ─── SYNC OPTIONS UI ──────────────────────────────────────
 function syncOpts() {
-  const s=(id,v)=>{const e=$(id);if(e)e.checked=v;};
-  s('optSound',G.opts.sound); s('optMusic',G.opts.music);
-  s('optVibrate',G.opts.vibrate); s('optEffects',G.opts.effects);
-  const mv=$('optMusicVol'); if(mv) mv.value=Math.round(G.opts.musicVol*100);
+  const s = (id, v) => { const e = $(id); if (e) e.checked = v; };
+  s('optSound',   G.opts.sound);
+  s('optMusic',   G.opts.music);
+  s('optVibrate', G.opts.vibrate);
+  s('optEffects', G.opts.effects);
+  const mv = $('optMusicVol'); if (mv) mv.value = Math.round(G.opts.musicVol * 100);
 }
 
 // ═══════════════════════════════════════════════════════════
 //  BOOT
 // ═══════════════════════════════════════════════════════════
 async function boot() {
-  loadScores(); loadSave(); syncOpts();
-  document.body.className='on-menu';
+  loadScores();
+  loadSave();
+  syncOpts();
+
+  document.body.className = 'on-menu';
   showScreen('menu');
+
+  // Dim Resume button if no valid save
+  if (!validateSave(savedGame)) {
+    ['btnResume-d','btnResume-m'].forEach(id => {
+      const b = $(id); if (b) b.style.opacity = '0.42';
+    });
+  }
+
+  // Load all sprites then populate menu decorations
   await loadImages();
   initMenuNugs();
-  if(!savedGame){ ['btnResume-d','btnResume-m'].forEach(id=>{const b=$(id);if(b)b.style.opacity='0.42';}); }
-  // Unlock audio on first touch
-  const unlock=()=>{ resumeAC(); if(G.opts.music)toggleMusic(true); };
-  document.addEventListener('click',unlock,{once:true});
-  document.addEventListener('touchstart',unlock,{once:true});
+
+  // Audio context must be unlocked by first user gesture
+  const unlock = () => {
+    resumeAC();
+    if (G.opts.music) toggleMusic(true);
+  };
+  document.addEventListener('click',      unlock, { once: true });
+  document.addEventListener('touchstart', unlock, { once: true });
 }
 
 boot();
