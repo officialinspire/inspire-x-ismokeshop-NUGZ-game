@@ -90,6 +90,34 @@ body.on-gameover .bg-image { filter: brightness(0.35) saturate(1.0); }
   );
 }
 
+/* ─── INTRO VIDEO SCREEN ─────────────────────────────────── */
+#screen-intro {
+  position: fixed; inset: 0; z-index: 300;
+  background: #000;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+#screen-intro video {
+  width: 100%; height: 100%;
+  object-fit: contain;
+}
+#introSkip {
+  position: absolute; bottom: max(40px, env(safe-area-inset-bottom, 40px)); right: 24px;
+  background: rgba(0,0,0,0.55);
+  color: rgba(255,255,255,0.8);
+  font-family: var(--font-hud); font-size: 12px; letter-spacing: 2px;
+  padding: 8px 18px; border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.25);
+  pointer-events: none;
+  animation: introPulse 1.8s ease-in-out infinite;
+}
+@keyframes introPulse {
+  0%, 100% { opacity: 0.55; }
+  50%       { opacity: 1;    }
+}
+body.on-intro .bg-image { filter: brightness(0); }
+body.on-intro #smokeLayer { display: none; }
+
 /* ─── SMOKE PARTICLES ────────────────────────────────────── */
 #smokeLayer {
   position: fixed; inset: 0; z-index: 1;
@@ -279,8 +307,10 @@ body.on-gameover .bg-image { filter: brightness(0.35) saturate(1.0); }
 .btn-label { flex:1; }
 .btn-arrow { color:var(--c-muted); opacity:0; transition:opacity .15s, transform .15s; }
 .menu-btn:hover .btn-arrow { opacity:1; transform:translateX(3px); }
-.menu-panel-footer { margin-top:12px; padding-top:12px; border-top:1px solid var(--c-border); text-align:center; }
+.menu-panel-footer { margin-top:12px; padding-top:12px; border-top:1px solid var(--c-border); text-align:center; display:flex; flex-direction:column; align-items:center; gap:6px; }
 .menu-panel-footer a { font-size:10px; color:rgba(111,207,63,0.38); letter-spacing:2px; text-decoration:none; }
+.footer-brand-logo { height:28px; opacity:0.65; filter:drop-shadow(0 0 8px rgba(111,207,63,0.35)); transition:opacity .2s; }
+.footer-brand-logo:hover { opacity:0.9; }
 
 /* ═══════════════════════════════════════════════════════════
    MAIN MENU — MOBILE
@@ -390,8 +420,8 @@ body.on-gameover .bg-image { filter: brightness(0.35) saturate(1.0); }
   color:rgba(255,255,255,0.25); font-size:16px;
 }
 .mbtn--ghost:hover { color:rgba(255,80,60,0.7); }
-.mobile-footer { display:flex; justify-content:center; align-items:center; }
-.mobile-brand { height:24px; opacity:0.55; filter:drop-shadow(0 0 6px rgba(111,207,63,0.3)); }
+.mobile-footer { display:flex; justify-content:center; align-items:center; padding:10px 0 6px; }
+.mobile-brand { height:30px; opacity:0.75; filter:drop-shadow(0 0 10px rgba(111,207,63,0.4)); transition:opacity .2s; }
 
 /* ═══════════════════════════════════════════════════════════
    GAME SCREEN — DESKTOP (3-column)

@@ -30,9 +30,19 @@
 <div id="app">
 
   <!-- ══════════════════════════════════════
+       INTRO VIDEO SCREEN
+  ══════════════════════════════════════ -->
+  <div id="screen-intro" class="screen active">
+    <video id="introVideo" playsinline muted autoplay preload="auto">
+      <source src="inspiresoftwareintro.mp4" type="video/mp4">
+    </video>
+    <div id="introSkip">TAP TO SKIP ▶</div>
+  </div>
+
+  <!-- ══════════════════════════════════════
        MAIN MENU
   ══════════════════════════════════════ -->
-  <div id="screen-menu" class="screen active">
+  <div id="screen-menu" class="screen">
 
     <!-- DESKTOP MENU LAYOUT -->
     <div class="menu-desktop">
@@ -41,7 +51,7 @@
           <div class="logo-glow-ring"></div>
           <div class="logo-tagline">🌿 MATCH &amp; CLEAR 🌿</div>
           <div class="logo-brand">
-            <img src="ismokeshop-logo.png" alt="iSmokeShop" class="brand-logo" onerror="this.style.display='none'">
+            <img src="logo.png" alt="iSmokeShop" class="brand-logo" onerror="this.style.display='none'">
             <span class="brand-url">ismokeshop.net</span>
           </div>
         </div>
@@ -68,6 +78,7 @@
             </button>
           </nav>
           <div class="menu-panel-footer">
+            <img src="logo.png" alt="iSmokeShop" class="footer-brand-logo" onerror="this.style.display='none'">
             <a href="https://www.ismokeshop.net" target="_blank">www.ismokeshop.net</a>
           </div>
         </div>
@@ -89,7 +100,7 @@
         <button class="mbtn mbtn--ghost" id="btnQuit-m">✕ QUIT</button>
       </div>
       <div class="mobile-footer">
-        <img src="ismokeshop-logo.png" alt="iSmokeShop" class="mobile-brand" onerror="this.style.display='none'">
+        <img src="logo.png" alt="iSmokeShop" class="mobile-brand" onerror="this.style.display='none'">
       </div>
     </div>
 
@@ -136,7 +147,7 @@
           <button class="side-btn" id="btnPause-d">⏸ PAUSE</button>
         </div>
         <div class="sidebar-brand">
-          <img src="ismokeshop-logo.png" alt="iSmokeShop" onerror="this.style.display='none'">
+          <img src="logo.png" alt="iSmokeShop" onerror="this.style.display='none'">
         </div>
       </div>
 
