@@ -1184,10 +1184,8 @@ async function boot() {
   if (vid) {
     showScreen('intro');
 
-    // Mute for autoplay compliance; unmute on first user gesture so audio plays
-    vid.muted = true;
-
-    // Audio context must be unlocked by first user gesture; also unmute the video
+    // Audio context must be unlocked by first user gesture; also unmute video if it
+    // had to start muted for autoplay compliance
     const unlock = () => {
       resumeAC();
       if (G.opts.music) toggleMusic(true);
@@ -1205,14 +1203,20 @@ async function boot() {
       goToMenu();
     }
 
-    // Try to play; if browser blocks it, skip straight to menu
-    vid.play().catch(() => goToMenuOnce());
+    // Try unmuted autoplay first so the video has sound.
+    // If the browser blocks unmuted autoplay, mute and retry.
+    // If even muted autoplay is blocked, go straight to the menu.
+    vid.play().catch(() => {
+      if (gone) return; // skip was already triggered — don't retry
+      vid.muted = true;
+      vid.play().catch(() => goToMenuOnce());
+    });
 
     const skip = () => {
       vid.removeEventListener('ended', skip);
       $('screen-intro')?.removeEventListener('click', skip);
-      vid.pause();
-      goToMenuOnce();
+      goToMenuOnce(); // transition first so the UI never stalls
+      vid.pause();    // then stop the video (safe to do after DOM update)
     };
     vid.addEventListener('ended', skip);
     $('screen-intro')?.addEventListener('click', skip);
