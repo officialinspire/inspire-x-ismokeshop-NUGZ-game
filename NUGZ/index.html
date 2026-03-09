@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>NUGZ 🌿 by iSmokeShop</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- GLOBAL PARALLAX BACKGROUND -->
+<div id="globalBg" class="global-bg"></div>
+
+<div id="app">
+
+  <!-- ══════════ MAIN MENU ══════════ -->
+  <div id="screen-menu" class="screen active">
+    <div class="menu-smoke">
+      <div class="smoke-particle"></div><div class="smoke-particle"></div>
+      <div class="smoke-particle"></div><div class="smoke-particle"></div>
+      <div class="smoke-particle"></div><div class="smoke-particle"></div>
+    </div>
+    <div class="menu-content">
+
+      <div class="logo-wrap">
+        <div class="logo-glow"></div>
+        <div class="logo-title">NUGZ</div>
+        <div class="logo-sub">🌿 Match &amp; Clear 🌿</div>
+      </div>
+
+      <!-- CENTERED floating nugs row -->
+      <div class="floating-nugs" id="floatingNugs"></div>
+
+      <div class="menu-buttons">
+        <button class="btn btn-primary pulse-glow" id="btnNewGame">🎮 NEW GAME</button>
+        <button class="btn btn-secondary" id="btnResume">▶ RESUME</button>
+        <button class="btn btn-secondary" id="btnHighScore">🏆 HIGH SCORES</button>
+        <button class="btn btn-outline" id="btnOptions">⚙️ OPTIONS</button>
+        <button class="btn btn-ghost" id="btnQuit">✕ QUIT</button>
+      </div>
+
+      <div class="menu-footer">
+        <img src="ismokeshop-logo.png" alt="iSmokeShop" class="iss-logo" onerror="this.style.display='none'">
+        <a href="https://www.ismokeshop.net" target="_blank">www.ismokeshop.net</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ GAME SCREEN ══════════ -->
+  <div id="screen-game" class="screen">
+    <div class="hud">
+      <div class="hud-left">
+        <button class="hud-btn" id="btnPause">⏸</button>
+        <div class="level-display">LVL <span id="dispLevel">1</span></div>
+      </div>
+      <div class="hud-center">
+        <div class="score-label">SCORE</div>
+        <div class="score-display" id="dispScore">0</div>
+      </div>
+      <div class="hud-right">
+        <div class="combo-display" id="dispCombo"></div>
+        <div class="highscore-mini">BEST&nbsp;<span id="dispBest">0</span></div>
+      </div>
+    </div>
+
+    <div class="progress-bar-wrap">
+      <div class="progress-bar" id="progressBar"></div>
+      <div class="progress-label" id="progressLabel">0 / 20</div>
+    </div>
+
+    <div class="game-area">
+      <canvas id="gameCanvas"></canvas>
+      <div id="popEffects"></div>
+    </div>
+
+    <div class="game-footer">
+      <div class="moves-display">
+        <span class="moves-icon">💨</span>
+        <span id="dispMoves">30</span>&nbsp;PUFFS LEFT
+      </div>
+      <div class="nug-queue">
+        <div class="queue-label">NEXT</div>
+        <div id="nextNugDisplay"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ PAUSE ══════════ -->
+  <div id="screen-pause" class="screen overlay-screen">
+    <div class="overlay-box">
+      <div class="overlay-title">⏸ PAUSED</div>
+      <button class="btn btn-primary" id="btnResumePause">▶ RESUME</button>
+      <button class="btn btn-secondary" id="btnRestartPause">🔄 RESTART</button>
+      <button class="btn btn-outline" id="btnMenuPause">🏠 MENU</button>
+    </div>
+  </div>
+
+  <!-- ══════════ GAME OVER ══════════ -->
+  <div id="screen-gameover" class="screen overlay-screen">
+    <div class="overlay-box gameover-box">
+      <div class="gameover-emoji">💨</div>
+      <div class="overlay-title">BURNED OUT</div>
+      <div class="gameover-score-label">YOUR SCORE</div>
+      <div class="gameover-score" id="goScore">0</div>
+      <div class="gameover-best" id="goNewBest" style="display:none">🏆 NEW HIGH SCORE!</div>
+      <div class="gameover-stats">
+        <div>LEVEL REACHED: <span id="goLevel">1</span></div>
+        <div>BEST COMBO: <span id="goCombo">0</span>x</div>
+      </div>
+      <button class="btn btn-primary pulse-glow" id="btnPlayAgain">🎮 PLAY AGAIN</button>
+      <button class="btn btn-outline" id="btnGoMenu">🏠 MENU</button>
+    </div>
+  </div>
+
+  <!-- ══════════ LEVEL UP ══════════ -->
+  <div id="screen-levelup" class="screen overlay-screen">
+    <div class="overlay-box levelup-box">
+      <div class="levelup-stars" id="levelupStars">⭐⭐⭐</div>
+      <div class="levelup-badge">LEVEL UP!</div>
+      <div class="levelup-num" id="luLevel">2</div>
+      <div class="levelup-msg" id="luMsg">Keep it lit! 🔥</div>
+      <button class="btn btn-primary" id="btnContinue">KEEP GOING 🌿</button>
+    </div>
+  </div>
+
+  <!-- ══════════ HIGH SCORES ══════════ -->
+  <div id="screen-scores" class="screen overlay-screen">
+    <div class="overlay-box scores-box">
+      <div class="overlay-title">🏆 HIGH SCORES</div>
+      <div id="scoresList" class="scores-list"></div>
+      <button class="btn btn-outline" id="btnScoresBack">← BACK</button>
+    </div>
+  </div>
+
+  <!-- ══════════ OPTIONS ══════════ -->
+  <div id="screen-options" class="screen overlay-screen">
+    <div class="overlay-box">
+      <div class="overlay-title">⚙️ OPTIONS</div>
+      <div class="option-row">
+        <span>🔊 SOUND FX</span>
+        <label class="toggle"><input type="checkbox" id="optSound" checked><span class="toggle-slider"></span></label>
+      </div>
+      <div class="option-row">
+        <span>🎵 MUSIC</span>
+        <label class="toggle"><input type="checkbox" id="optMusic"><span class="toggle-slider"></span></label>
+      </div>
+      <div class="option-row">
+        <span>📳 VIBRATE</span>
+        <label class="toggle"><input type="checkbox" id="optVibrate" checked><span class="toggle-slider"></span></label>
+      </div>
+      <div class="option-row">
+        <span>✨ EFFECTS</span>
+        <label class="toggle"><input type="checkbox" id="optEffects" checked><span class="toggle-slider"></span></label>
+      </div>
+      <div class="option-row">
+        <span>🔉 MUSIC VOL</span>
+        <input type="range" id="optMusicVol" min="0" max="100" value="60" class="vol-slider">
+      </div>
+      <button class="btn btn-outline" id="btnOptBack">← BACK</button>
+    </div>
+  </div>
+
+</div><!-- /#app -->
+
+<!-- Audio -->
+<audio id="bgMusic" loop preload="auto">
+  <source src="NUGZ Main Menu (Take 1).mp3" type="audio/mpeg">
+</audio>
+
+<script src="index.js"></script>
+</body>
+</html>
