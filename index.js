@@ -1170,11 +1170,6 @@ async function boot() {
   loadSave();
   syncOpts();
 
-  // Audio context must be unlocked by first user gesture
-  const unlock = () => { resumeAC(); if (G.opts.music) toggleMusic(true); };
-  document.addEventListener('click',      unlock, { once: true });
-  document.addEventListener('touchstart', unlock, { once: true });
-
   // ── INTRO VIDEO ──────────────────────────────────────────
   function goToMenu() {
     showScreen('menu');
@@ -1188,17 +1183,44 @@ async function boot() {
   const vid = $('introVideo');
   if (vid) {
     showScreen('intro');
-    // Try to play; if browser blocks it (e.g. no muted+autoplay), skip straight to menu
-    vid.play().catch(() => goToMenu());
+
+    // Mute for autoplay compliance; unmute on first user gesture so audio plays
+    vid.muted = true;
+
+    // Audio context must be unlocked by first user gesture; also unmute the video
+    const unlock = () => {
+      resumeAC();
+      if (G.opts.music) toggleMusic(true);
+      if (!vid.ended && !vid.paused) vid.muted = false;
+    };
+    document.addEventListener('click',      unlock, { once: true });
+    document.addEventListener('touchstart', unlock, { once: true });
+
+    // Guard against goToMenu() being called twice (e.g. vid.pause() causes
+    // the pending play() promise to reject, which would re-fire the catch handler)
+    let gone = false;
+    function goToMenuOnce() {
+      if (gone) return;
+      gone = true;
+      goToMenu();
+    }
+
+    // Try to play; if browser blocks it, skip straight to menu
+    vid.play().catch(() => goToMenuOnce());
+
     const skip = () => {
-      vid.pause();
       vid.removeEventListener('ended', skip);
       $('screen-intro')?.removeEventListener('click', skip);
-      goToMenu();
+      vid.pause();
+      goToMenuOnce();
     };
     vid.addEventListener('ended', skip);
     $('screen-intro')?.addEventListener('click', skip);
   } else {
+    // Audio unlock still needed even without intro video
+    const unlock = () => { resumeAC(); if (G.opts.music) toggleMusic(true); };
+    document.addEventListener('click',      unlock, { once: true });
+    document.addEventListener('touchstart', unlock, { once: true });
     goToMenu();
   }
 
