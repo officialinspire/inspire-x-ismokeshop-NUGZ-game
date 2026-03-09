@@ -37,7 +37,7 @@ const G = {
   combo:0, maxCombo:0,
   running:false, selected:null, animating:false,
   nextNugs:[], cellSize:64,
-  opts:{ sound:true, music:false, vibrate:true, effects:true, musicVol:0.6 }
+  opts:{ sound:true, music:true, vibrate:true, effects:true, musicVol:0.6 }
 };
 let highScores = [];
 let savedGame   = null;
@@ -1034,6 +1034,34 @@ function on(ids, fn) {
     const el = $(id); if (el) el.addEventListener('click', fn);
   });
 }
+
+// ─── BUTTON RESPONSIVENESS ────────────────────────────────
+// Subtle hover tone (desktop only)
+function hoverTone() { if (G.opts.sound) tone(520,'sine',0.035,0.07); }
+
+// Wire hover sounds + ripple + instant press class on all interactive buttons
+document.querySelectorAll('.menu-btn, .mbtn, .modal-btn, .side-btn').forEach(btn => {
+  // Hover sound on mouse enter (skipped on touch to avoid double-fire)
+  btn.addEventListener('mouseenter', () => { if (!btn.disabled) hoverTone(); });
+
+  // Immediate visual press class for sub-frame feedback before click fires
+  btn.addEventListener('pointerdown', e => {
+    btn.classList.add('btn-pressing');
+    // Ripple spawn at pointer position
+    const r = btn.getBoundingClientRect();
+    const rip = document.createElement('span');
+    rip.className = 'btn-ripple';
+    rip.style.left = (e.clientX - r.left) + 'px';
+    rip.style.top  = (e.clientY - r.top)  + 'px';
+    btn.appendChild(rip);
+    rip.addEventListener('animationend', () => rip.remove(), { once: true });
+  });
+
+  const releasePressing = () => btn.classList.remove('btn-pressing');
+  btn.addEventListener('pointerup',     releasePressing);
+  btn.addEventListener('pointerleave',  releasePressing);
+  btn.addEventListener('pointercancel', releasePressing);
+});
 
 // New Game
 on(['btnNewGame-d','btnNewGame-m'], () => { resumeAC(); newGame(); });
