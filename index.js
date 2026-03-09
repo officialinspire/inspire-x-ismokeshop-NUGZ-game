@@ -60,7 +60,7 @@ function setActiveCanvas() {
 }
 
 // ─── SCREEN MANAGER ───────────────────────────────────────
-const SCREEN_IDS = ['menu','game','pause','gameover','levelup','scores','options'];
+const SCREEN_IDS = ['intro','menu','game','pause','gameover','levelup','scores','options'];
 function showScreen(name) {
   SCREEN_IDS.forEach(id => $(`screen-${id}`)?.classList.remove('active'));
   $(`screen-${name}`)?.classList.add('active');
@@ -136,7 +136,7 @@ function handleMusic(screen) {
   if (!bgMusic) return;
   bgMusic.volume = G.opts.musicVol;
   if (G.opts.music && ['menu','game'].includes(screen)) bgMusic.play().catch(()=>{});
-  else bgMusic.pause();
+  else if (screen !== 'intro') bgMusic.pause();
 }
 function toggleMusic(on) {
   G.opts.music = on;
@@ -1170,27 +1170,41 @@ async function boot() {
   loadSave();
   syncOpts();
 
-  document.body.className = 'on-menu';
-  showScreen('menu');
-
-  // Dim Resume button if no valid save
-  if (!validateSave(savedGame)) {
-    ['btnResume-d','btnResume-m'].forEach(id => {
-      const b = $(id); if (b) b.style.opacity = '0.42';
-    });
-  }
-
-  // Load all sprites then populate menu decorations
-  await loadImages();
-  initMenuNugs();
-
   // Audio context must be unlocked by first user gesture
-  const unlock = () => {
-    resumeAC();
-    if (G.opts.music) toggleMusic(true);
-  };
+  const unlock = () => { resumeAC(); if (G.opts.music) toggleMusic(true); };
   document.addEventListener('click',      unlock, { once: true });
   document.addEventListener('touchstart', unlock, { once: true });
+
+  // ── INTRO VIDEO ──────────────────────────────────────────
+  function goToMenu() {
+    showScreen('menu');
+    if (!validateSave(savedGame)) {
+      ['btnResume-d','btnResume-m'].forEach(id => {
+        const b = $(id); if (b) b.style.opacity = '0.42';
+      });
+    }
+  }
+
+  const vid = $('introVideo');
+  if (vid) {
+    showScreen('intro');
+    // Try to play; if browser blocks it (e.g. no muted+autoplay), skip straight to menu
+    vid.play().catch(() => goToMenu());
+    const skip = () => {
+      vid.pause();
+      vid.removeEventListener('ended', skip);
+      $('screen-intro')?.removeEventListener('click', skip);
+      goToMenu();
+    };
+    vid.addEventListener('ended', skip);
+    $('screen-intro')?.addEventListener('click', skip);
+  } else {
+    goToMenu();
+  }
+
+  // Load all sprites then populate menu decorations (runs in background)
+  await loadImages();
+  initMenuNugs();
 }
 
 boot();
