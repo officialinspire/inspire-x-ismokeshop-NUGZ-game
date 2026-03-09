@@ -282,9 +282,14 @@ function calcCellSize() {
 
 function resizeCanvas() {
   setActiveCanvas();
-  const cs = G.cellSize;
-  activeCanvas.width  = cs * COLS;
-  activeCanvas.height = cs * ROWS;
+  const cs  = G.cellSize;
+  const dpr = window.devicePixelRatio || 1;
+  const logW = cs * COLS;
+  const logH = cs * ROWS;
+  activeCanvas.width  = logW * dpr;
+  activeCanvas.height = logH * dpr;
+  activeCanvas.style.width  = logW + 'px';
+  activeCanvas.style.height = logH + 'px';
   desktopCanvas.style.display = (activeCanvas === desktopCanvas) ? 'block' : 'none';
   mobileCanvas.style.display  = (activeCanvas === mobileCanvas)  ? 'block' : 'none';
 }
@@ -304,21 +309,27 @@ function drawGrid() {
   const cvs = activeCanvas;
   const ctx = cvs.getContext('2d');
   const cs  = G.cellSize;
+  const dpr = window.devicePixelRatio || 1;
+  const logW = cs * COLS;
+  const logH = cs * ROWS;
 
-  ctx.clearRect(0, 0, cvs.width, cvs.height);
+  // Scale context so all drawing uses CSS-pixel coordinates (crisp on HiDPI)
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  ctx.clearRect(0, 0, logW, logH);
 
   // Dark translucent grid backing
   ctx.fillStyle = 'rgba(3,8,2,0.78)';
-  ctx.fillRect(0, 0, cvs.width, cvs.height);
+  ctx.fillRect(0, 0, logW, logH);
 
   // Grid lines
   ctx.strokeStyle = 'rgba(111,207,63,0.09)';
   ctx.lineWidth = 1;
   for (let r = 0; r <= ROWS; r++) {
-    ctx.beginPath(); ctx.moveTo(0, r*cs); ctx.lineTo(cvs.width, r*cs); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, r*cs); ctx.lineTo(logW, r*cs); ctx.stroke();
   }
   for (let c = 0; c <= COLS; c++) {
-    ctx.beginPath(); ctx.moveTo(c*cs, 0); ctx.lineTo(c*cs, cvs.height); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(c*cs, 0); ctx.lineTo(c*cs, logH); ctx.stroke();
   }
 
   // Draw cells
@@ -483,6 +494,33 @@ function spawnParticles(r, c, color, n=10) {
   }
 }
 
+function spawnFireParticles(r, c) {
+  if (!G.opts.effects) return;
+  const { x: px, y: py } = cellCenter(r, c);
+  const fireColors = ['#ffee22','#ffcc00','#ffaa00','#ff7700','#ff4400','#ff2200'];
+  const n = 14;
+  for (let i = 0; i < n; i++) {
+    const el = document.createElement('div');
+    el.className = 'fire-particle';
+    const color = fireColors[Math.floor(Math.random() * fireColors.length)];
+    const sz = 4 + Math.random() * 8;
+    // Fan mostly upward with some spread
+    const ang = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.85;
+    const dist = 28 + Math.random() * 52;
+    const fdx = Math.cos(ang) * dist;
+    const fdy = Math.sin(ang) * dist;
+    const dur = (0.4 + Math.random() * 0.45).toFixed(2);
+    el.style.cssText = `
+      width:${sz}px; height:${sz * 1.35}px; background:${color};
+      box-shadow:0 0 4px ${color};
+      left:${px - sz / 2}px; top:${py - sz / 2}px;
+      --fdx:${fdx}px; --fdy:${fdy}px;
+      animation-duration:${dur}s;`;
+    activePopLayer.appendChild(el);
+    el.addEventListener('animationend', () => el.remove(), { once: true });
+  }
+}
+
 function spawnSelectFX(r, c) {
   if (!G.opts.effects) return;
   const cs = G.cellSize;
@@ -545,13 +583,13 @@ async function processMatches() {
     // Clear matched cells from grid, spawn effects
     cells.forEach((k, i) => {
       const [r,c] = k.split(',').map(Number);
-      spawnParticles(r, c, NUG_COLORS[types[i]] || '#aaffaa', 9);
+      spawnFireParticles(r, c);
       G.grid[r][c] = null;
       highlightStrain(types[i]);
     });
 
     SFX.pop(matched.size);
-    if (matched.size >= 6) { setTimeout(() => SFX.bigClear(), 60); screenFlash('rgba(111,207,63,0.18)'); }
+    if (matched.size >= 6) { setTimeout(() => SFX.bigClear(), 60); screenFlash('rgba(255,100,0,0.22)'); }
     if (G.combo >= 2) { setTimeout(() => SFX.combo(G.combo), 80); vib([30,20,55]); }
     else vib(30);
 
@@ -735,7 +773,8 @@ async function doLevelUp() {
 
   SFX.levelUp();
   vib([50,30,100,30,160]);
-  screenFlash('rgba(245,200,66,0.32)');
+  screenFlash('rgba(255,120,0,0.28)');
+  setTimeout(() => screenFlash('rgba(245,200,66,0.22)'), 180);
 
   G.level++;
   G.cleared = 0;

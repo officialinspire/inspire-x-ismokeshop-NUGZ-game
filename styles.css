@@ -680,7 +680,7 @@ body.on-gameover .bg-image { filter: brightness(0.35) saturate(1.0); }
 .go-stat span:last-child  { font-family:var(--font-head); font-size:24px; color:#fff; }
 
 /* Level Up */
-.modal--levelup { border-color:rgba(245,200,66,0.35); box-shadow:0 32px 90px rgba(0,0,0,0.88), 0 0 50px rgba(245,200,66,0.12); }
+.modal--levelup { border-color:rgba(255,120,0,0.45); box-shadow:0 32px 90px rgba(0,0,0,0.88), 0 0 60px rgba(255,100,0,0.25), 0 0 120px rgba(255,60,0,0.12); }
 .lu-stars { font-size:32px; letter-spacing:8px; animation:starBurst .6s cubic-bezier(.34,1.56,.64,1); }
 @keyframes starBurst { 0%{transform:scale(0) rotate(-30deg);} 100%{transform:scale(1) rotate(0);} }
 .lu-badge { font-family:var(--font-hud); font-size:12px; font-weight:700; color:var(--c-gold); letter-spacing:8px; text-shadow:var(--glow-gold); }
@@ -786,3 +786,44 @@ body.on-gameover .bg-image { filter: brightness(0.35) saturate(1.0); }
   animation:sFlash .45s ease forwards;
 }
 @keyframes sFlash { 0%{opacity:0.55;} 100%{opacity:0;} }
+
+/* ═══════════════════════════════════════════════════════════
+   FIRE PARTICLES (nug clear burst)
+═══════════════════════════════════════════════════════════ */
+.fire-particle {
+  position:absolute; pointer-events:none;
+  border-radius:50% 50% 35% 35%;
+  animation:fireFly 0.6s ease-out forwards;
+}
+@keyframes fireFly {
+  0%   { transform:translate(0,0) scale(1.2); opacity:1; }
+  45%  { opacity:0.85; }
+  100% { transform:translate(var(--fdx,0px),var(--fdy,-60px)) scale(0.05); opacity:0; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   LEVEL-UP FIRE FLAMES (CSS flame pillars)
+═══════════════════════════════════════════════════════════ */
+.lu-fire {
+  position:absolute; bottom:0; left:0; right:0; height:110px;
+  pointer-events:none; border-radius:0 0 24px 24px; overflow:hidden;
+}
+.lu-flame {
+  position:absolute; bottom:-8px;
+  border-radius:50% 50% 20% 20% / 60% 60% 30% 30%;
+  transform-origin:bottom center;
+  animation:flameDance 0.9s ease-in-out infinite alternate;
+  filter:blur(1.5px);
+}
+.lu-flame:nth-child(1){left:4%;  width:32px;height:68px; animation-delay:0s;    background:radial-gradient(ellipse at 50% 100%,#ffee22,#ff6600 55%,transparent);}
+.lu-flame:nth-child(2){left:18%; width:40px;height:90px; animation-delay:0.18s; background:radial-gradient(ellipse at 50% 100%,#ffcc00,#ff4400 55%,transparent);}
+.lu-flame:nth-child(3){left:35%; width:46px;height:108px;animation-delay:0.32s; background:radial-gradient(ellipse at 50% 100%,#ffdd22,#ff5500 58%,transparent);}
+.lu-flame:nth-child(4){left:52%; width:44px;height:98px; animation-delay:0.08s; background:radial-gradient(ellipse at 50% 100%,#ffbb00,#ff3300 55%,transparent);}
+.lu-flame:nth-child(5){left:68%; width:38px;height:82px; animation-delay:0.25s; background:radial-gradient(ellipse at 50% 100%,#ffee22,#ff7700 55%,transparent);}
+.lu-flame:nth-child(6){left:83%; width:30px;height:62px; animation-delay:0.42s; background:radial-gradient(ellipse at 50% 100%,#ffdd00,#ff5500 55%,transparent);}
+@keyframes flameDance {
+  0%  {transform:scaleX(1)    scaleY(0.88) skewX(0deg);   opacity:0.9;}
+  35% {transform:scaleX(0.82) scaleY(1.12) skewX(-5deg);  opacity:1;}
+  70% {transform:scaleX(1.12) scaleY(0.94) skewX(4deg);   opacity:0.85;}
+  100%{transform:scaleX(0.88) scaleY(1.06) skewX(-2deg);  opacity:0.95;}
+}
