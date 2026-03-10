@@ -89,7 +89,18 @@ function bindActiveCanvasInput() {
 }
 
 // ─── SCREEN MANAGER ───────────────────────────────────────
-const SCREEN_IDS = ['start','intro','intro2','menu','game','pause','gameover','levelup','scores','options'];
+const SCREEN_IDS = ['start','intro','intro2','menu','game','pause','gameover','levelup','scores','options','howto','stats'];
+let overlayReturnScreen = 'menu';
+
+function openOverlay(name, returnTo = 'menu') {
+  overlayReturnScreen = returnTo;
+  showScreen(name);
+}
+
+function closeOverlayWithReturn(fallback = 'menu') {
+  showScreen(overlayReturnScreen || fallback);
+}
+
 function showScreen(name) {
   SCREEN_IDS.forEach(id => $(`screen-${id}`)?.classList.remove('active'));
   $(`screen-${name}`)?.classList.add('active');
@@ -1206,6 +1217,18 @@ function setEl(id, val, bump=false) {
   if (bump) { el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
 }
 
+
+function refreshStatsOverlay() {
+  const best = (highScores[0]?.score || 0).toLocaleString();
+  setEl('statsScore', G.score.toLocaleString());
+  setEl('statsBest', best);
+  setEl('statsLevel', G.level);
+  setEl('statsMoves', G.moves);
+  setEl('statsGoal', `${G.cleared} / ${G.goal}`);
+  setEl('statsMaxCombo', `${G.maxCombo}x`);
+  setEl('statsCleared', G.totalCleared);
+}
+
 function updateNextDisplay() {
   ['d-next','m-next'].forEach(id => {
     const el = $(id); if (!el) return;
@@ -1742,25 +1765,53 @@ $('optMusicVol')?.addEventListener('input', e => {
   if (bgMusic) bgMusic.volume = G.opts.musicVol;
 });
 
-// Quit
-on(['btnQuit-d','btnQuit-m'], () => {
+// How To Play
+on(['btnHowTo-d','btnHowTo-m'], () => {
   resumeAC();
+  openOverlay('howto', 'menu');
+  SFX.select();
+});
+
+function quitGameFlow() {
   if (confirm('Quit NUGZ? 🌿')) {
     saveGame();
-    // window.close() only works for script-opened tabs.
-    // Fall back to redirecting to the shop after a short delay.
     window.close();
     setTimeout(() => {
-      try { window.location.href = 'https://www.ismokeshop.net'; } catch(e) {}
+      try { window.location.href = 'https://www.ismokeshop.net'; } catch (e) {}
     }, 300);
   }
-});
+}
 
 // Pause
 on(['btnPause-d','btnPause-m2'], () => { G.running = false; showScreen('pause'); });
 on('btnResumePause',  () => { G.running = true; showScreen('game'); SFX.select(); });
 on('btnRestartPause', () => { if (confirm('Start a new game?')) newGame(); });
 on('btnMenuPause',    () => { saveGame(); G.animating = false; showScreen('menu'); });
+on('btnHowToPause', () => {
+  resumeAC();
+  openOverlay('howto', 'pause');
+  SFX.select();
+});
+on('btnStatsPause', () => {
+  resumeAC();
+  refreshStatsOverlay();
+  openOverlay('stats', 'pause');
+  SFX.select();
+});
+on('btnQuitPause', () => {
+  resumeAC();
+  quitGameFlow();
+});
+
+on('btnHowToBack', () => {
+  closeOverlayWithReturn('menu');
+  SFX.deselect();
+});
+
+on('btnStatsBack', () => {
+  closeOverlayWithReturn('pause');
+  SFX.deselect();
+});
 
 // Game over
 on('btnPlayAgain', () => { resumeAC(); newGame(); });
