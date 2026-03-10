@@ -25,6 +25,16 @@ const LEVEL_MSGS  = [
   "LEGENDARY STATUS! 🏆"
 ];
 const COMBO_LABELS = ['DANK!','FIRE! 🔥','LIT! 🌿','BLAZED! 💨','STONED!','COOKED! 🍃','RIPPED!','LEGENDARY! 🏆'];
+const PERF = {
+  heavyComboThreshold: 8,
+  massiveComboThreshold: 12,
+  maxFireParticlesPerCell: 14,
+  reducedFireParticlesPerCell: 6,
+  massiveFireParticlesPerCell: 3,
+  disablePerCellTextAtMassive: true,
+  disableExtraFlashAtMassive: true,
+  disableStrainSpamAtMassive: true
+};
 
 // ─── LAYOUT DETECTION ─────────────────────────────────────
 const isMobile = () => {
@@ -794,11 +804,11 @@ function spawnParticles(r, c, color, n=10) {
   }
 }
 
-function spawnFireParticles(r, c) {
+function spawnFireParticles(r, c, count = 14) {
   if (!G.opts.effects) return;
   const { x: px, y: py } = cellCenter(r, c);
   const fireColors = ['#ffee22','#ffcc00','#ffaa00','#ff7700','#ff4400','#ff2200'];
-  const n = 14;
+  const n = count;
   for (let i = 0; i < n; i++) {
     const el = document.createElement('div');
     el.className = 'fire-particle';
@@ -819,6 +829,34 @@ function spawnFireParticles(r, c) {
     activePopLayer.appendChild(el);
     el.addEventListener('animationend', () => el.remove(), { once: true });
   }
+}
+
+function getFxBudget(clearCount) {
+  if (clearCount >= PERF.massiveComboThreshold) {
+    return {
+      fireParticlesPerCell: PERF.massiveFireParticlesPerCell,
+      allowPerCellText: !PERF.disablePerCellTextAtMassive,
+      allowExtraFlash: !PERF.disableExtraFlashAtMassive,
+      allowStrainFx: !PERF.disableStrainSpamAtMassive,
+      mode: 'massive'
+    };
+  }
+  if (clearCount >= PERF.heavyComboThreshold) {
+    return {
+      fireParticlesPerCell: PERF.reducedFireParticlesPerCell,
+      allowPerCellText: true,
+      allowExtraFlash: true,
+      allowStrainFx: true,
+      mode: 'heavy'
+    };
+  }
+  return {
+    fireParticlesPerCell: PERF.maxFireParticlesPerCell,
+    allowPerCellText: true,
+    allowExtraFlash: true,
+    allowStrainFx: true,
+    mode: 'normal'
+  };
 }
 
 function spawnSelectFX(r, c) {
@@ -902,6 +940,7 @@ async function processMatches() {
       const [r, c] = k.split(',').map(Number);
       return G.grid[r][c];
     });
+    const fxBudget = getFxBudget(toProcess.size);
 
     await animPop(cellsToPop);
 
@@ -914,9 +953,10 @@ async function processMatches() {
     let ti = 0;
     for (const k of toProcess) {
       const [r, c] = k.split(',').map(Number);
-      highlightStrain(types[ti++]);
+      if (fxBudget.allowStrainFx) highlightStrain(types[ti++]);
+      else ti++;
       if (specialKeys.has(k)) continue; // this cell becomes a special — keep its nug
-      spawnFireParticles(r, c);
+      spawnFireParticles(r, c, fxBudget.fireParticlesPerCell);
       clearSpecial(r, c); // remove any stale sidecar entry
       G.grid[r][c] = null;
     }
@@ -927,13 +967,16 @@ async function processMatches() {
         const [r, c] = key.split(',').map(Number);
         setSpecial(r, c, type);
         const icon = type === 'ladybug' ? '🐞' : type === 'seed' ? '🌱' : '💧';
-        spawnText(r, c - 1, `${icon}`, '#ffffff', 26);
-        screenFlash('rgba(111,207,63,0.12)');
+        if (fxBudget.allowPerCellText) spawnText(r, c - 1, `${icon}`, '#ffffff', 26);
+        if (fxBudget.allowExtraFlash) screenFlash('rgba(111,207,63,0.12)');
       }
     }
 
     SFX.pop(toProcess.size);
-    if (toProcess.size >= 6) { setTimeout(() => SFX.bigClear(), 60); screenFlash('rgba(255,100,0,0.22)'); }
+    if (toProcess.size >= 6) {
+      setTimeout(() => SFX.bigClear(), 60);
+      if (fxBudget.allowExtraFlash) screenFlash('rgba(255,100,0,0.22)');
+    }
     if (G.combo >= 2) { setTimeout(() => SFX.combo(G.combo), 80); playHaptic('combo'); }
     else playHaptic('swap');
 
@@ -943,7 +986,7 @@ async function processMatches() {
     if (G.combo >= 2) {
       const label = COMBO_LABELS[Math.min(G.combo - 2, COMBO_LABELS.length - 1)];
       spawnText(mr - 1, mc, `${G.combo}x ${label}`, '#f5c842', 22);
-      screenFlash('rgba(245,200,66,0.09)');
+      if (fxBudget.allowExtraFlash) screenFlash('rgba(245,200,66,0.09)');
     }
     spawnText(mr, mc + 1, `+${pts}`, '#9ee060', 18);
 
