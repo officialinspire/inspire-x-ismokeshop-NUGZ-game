@@ -960,3 +960,105 @@ body.on-intro #smokeLayer { display: none; }
 /* ─── MOBILE: no NUGZ text title — bg image carries branding ─ */
 .mobile-logo-sub { font-size: 13px; letter-spacing: 5px; margin-top: 0; }
 .mobile-logo-glow { height: 60px; }
+
+/* ═══════════════════════════════════════════════════════════
+   SPECIAL POWERUP NUG CLASSES
+   Used when the game renders via DOM elements instead of canvas.
+   The canvas path draws overlays directly via drawSpecialOverlay().
+═══════════════════════════════════════════════════════════ */
+
+/* Base class applied to all special nugs */
+.nug-special {
+  position: relative;
+  z-index: 0;
+}
+.nug-special::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 12px;
+  pointer-events: none;
+  z-index: 1;
+  animation: specialPulse 2s ease-in-out infinite;
+}
+
+/* Ladybug — red circle with black dots badge overlay */
+.nug-special.special-ladybug::after {
+  border: 2px solid rgba(220, 40, 40, 0.75);
+  box-shadow:
+    0 0 8px rgba(220, 40, 40, 0.6),
+    0 0 18px rgba(220, 40, 40, 0.25),
+    inset 0 0 6px rgba(220, 40, 40, 0.15);
+  animation-name: ladybugPulse;
+}
+/* Badge dot drawn via a radial pseudo-element */
+.nug-special.special-ladybug::before {
+  content: '🐞';
+  position: absolute;
+  top: -6px; right: -6px;
+  font-size: 14px;
+  line-height: 1;
+  filter: drop-shadow(0 0 4px rgba(220,20,20,0.9));
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* Seed — glowing golden ring aura */
+.nug-special.special-seed::after {
+  border: 2px solid rgba(245, 200, 66, 0.80);
+  box-shadow:
+    0 0 12px rgba(245, 200, 66, 0.65),
+    0 0 28px rgba(245, 180, 20, 0.30),
+    inset 0 0 8px rgba(245, 200, 66, 0.12);
+  animation-name: seedPulse;
+}
+.nug-special.special-seed::before {
+  content: '';
+  position: absolute;
+  top: -5px; right: -5px;
+  width: 14px; height: 18px;
+  background: radial-gradient(ellipse at 40% 35%, #fff7a0 0%, #f5d020 55%, transparent 100%);
+  border-radius: 50% 50% 45% 45% / 60% 60% 40% 40%;
+  transform: rotate(-15deg);
+  box-shadow: 0 0 6px rgba(245,200,66,0.8);
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* Water — blue droplet aura */
+.nug-special.special-water::after {
+  border: 2px solid rgba(94, 207, 200, 0.75);
+  box-shadow:
+    0 0 10px rgba(94, 207, 200, 0.60),
+    0 0 24px rgba(94, 207, 200, 0.25),
+    inset 0 0 6px rgba(94, 207, 200, 0.12);
+  animation-name: waterPulse;
+}
+.nug-special.special-water::before {
+  content: '💧';
+  position: absolute;
+  top: -7px; right: -5px;
+  font-size: 13px;
+  line-height: 1;
+  filter: drop-shadow(0 0 5px rgba(94,207,200,0.9));
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* ── Keyframe pulses (one per special type for distinct rhythm) ── */
+@keyframes specialPulse {
+  0%, 100% { opacity: 0.85; }
+  50%       { opacity: 1; }
+}
+@keyframes ladybugPulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(220,40,40,0.6),  0 0 18px rgba(220,40,40,0.25); }
+  50%       { box-shadow: 0 0 14px rgba(220,40,40,0.9), 0 0 30px rgba(220,40,40,0.45); }
+}
+@keyframes seedPulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(245,200,66,0.65), 0 0 28px rgba(245,180,20,0.30); }
+  50%       { box-shadow: 0 0 20px rgba(245,200,66,0.90), 0 0 44px rgba(245,180,20,0.55); }
+}
+@keyframes waterPulse {
+  0%, 100% { box-shadow: 0 0 10px rgba(94,207,200,0.60), 0 0 24px rgba(94,207,200,0.25); }
+  50%       { box-shadow: 0 0 18px rgba(94,207,200,0.90), 0 0 38px rgba(94,207,200,0.45); }
+}

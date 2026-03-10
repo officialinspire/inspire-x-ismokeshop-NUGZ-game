@@ -456,6 +456,118 @@ function resizeCanvas() {
   mobileCanvas.style.display  = (activeCanvas === mobileCanvas)  ? 'block' : 'none';
 }
 
+// ─── SPECIAL POWERUP OVERLAY DRAWING ──────────────────────
+// Draws a visually distinct overlay directly on the canvas for each special
+// type. Called outside save/restore so it always draws at full opacity.
+//
+//  ladybug → red circle with black dividing line + 4 dots + head
+//  seed    → golden glowing ring aura + teardrop badge
+//  water   → blue concentric ring aura + droplet badge
+function drawSpecialOverlay(ctx, spType, cx, cy, size) {
+  ctx.save();
+
+  if (spType === 'ladybug') {
+    // ── Ladybug badge (top-right corner) ──────────────────
+    const bx = cx + size * 0.30;
+    const by = cy - size * 0.30;
+    const br = size * 0.26;
+
+    // Red glow halo
+    ctx.shadowColor = 'rgba(220,20,20,0.85)';
+    ctx.shadowBlur  = 8;
+
+    // Red body
+    ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2);
+    ctx.fillStyle = '#e02828'; ctx.fill();
+
+    ctx.shadowBlur = 0;
+
+    // Center dividing line (wings)
+    ctx.strokeStyle = '#111'; ctx.lineWidth = Math.max(1, br * 0.22);
+    ctx.beginPath(); ctx.moveTo(bx, by - br); ctx.lineTo(bx, by + br); ctx.stroke();
+
+    // 4 black dots (2 per wing)
+    ctx.fillStyle = '#111';
+    const dr = Math.max(1, br * 0.21);
+    [[-0.42, -0.18], [0.42, -0.18], [-0.30, 0.38], [0.30, 0.38]].forEach(([ox, oy]) => {
+      ctx.beginPath(); ctx.arc(bx + ox * br, by + oy * br, dr, 0, Math.PI * 2); ctx.fill();
+    });
+
+    // Black head
+    ctx.beginPath(); ctx.arc(bx, by - br * 0.84, br * 0.30, 0, Math.PI * 2);
+    ctx.fillStyle = '#222'; ctx.fill();
+
+  } else if (spType === 'seed') {
+    // ── Seed: golden glowing ring aura ────────────────────
+    const auraR = size * 0.54;
+
+    // Soft radial fill inside the ring
+    const auraGrad = ctx.createRadialGradient(cx, cy, auraR * 0.6, cx, cy, auraR);
+    auraGrad.addColorStop(0, 'rgba(245,200,66,0.20)');
+    auraGrad.addColorStop(1, 'rgba(245,180,20,0)');
+    ctx.beginPath(); ctx.arc(cx, cy, auraR, 0, Math.PI * 2);
+    ctx.fillStyle = auraGrad; ctx.fill();
+
+    // Glowing ring stroke
+    ctx.beginPath(); ctx.arc(cx, cy, auraR - 1, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(245,200,66,0.78)';
+    ctx.lineWidth   = 2;
+    ctx.shadowColor = '#f5c842'; ctx.shadowBlur = 14;
+    ctx.stroke();
+
+    // Teardrop seed badge (top-right corner)
+    const sx = cx + size * 0.28, sy = cy - size * 0.28;
+    const sr = Math.max(4, size * 0.15);
+    ctx.shadowColor = '#f5c842'; ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, sr * 0.58, sr, -0.35, 0, Math.PI * 2);
+    ctx.fillStyle = '#f5d020'; ctx.fill();
+
+    // Shine highlight on seed
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.ellipse(sx - sr * 0.16, sy - sr * 0.28, sr * 0.20, sr * 0.30, -0.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,252,180,0.65)'; ctx.fill();
+
+  } else if (spType === 'water') {
+    // ── Water: blue concentric ring aura ─────────────────
+    ctx.shadowColor = '#5ecfc8'; ctx.shadowBlur = 16;
+
+    // Outer ring
+    ctx.beginPath(); ctx.arc(cx, cy, size * 0.54, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(94,207,200,0.60)'; ctx.lineWidth = 2.2; ctx.stroke();
+
+    // Inner ring (tighter, subtler)
+    ctx.beginPath(); ctx.arc(cx, cy, size * 0.43, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(94,207,200,0.30)'; ctx.lineWidth = 1.2; ctx.stroke();
+
+    // Radial blue fill between rings
+    const grad = ctx.createRadialGradient(cx, cy, size * 0.34, cx, cy, size * 0.55);
+    grad.addColorStop(0, 'rgba(94,207,200,0.14)');
+    grad.addColorStop(1, 'rgba(94,207,200,0)');
+    ctx.beginPath(); ctx.arc(cx, cy, size * 0.55, 0, Math.PI * 2);
+    ctx.fillStyle = grad; ctx.fill();
+
+    // Droplet badge (top-right corner)
+    const dx = cx + size * 0.27, dy = cy - size * 0.34;
+    const dr = Math.max(4, size * 0.14);
+    ctx.shadowColor = '#5ecfc8'; ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.moveTo(dx, dy - dr);
+    ctx.bezierCurveTo(dx + dr * 0.85, dy,          dx + dr * 0.85, dy + dr * 0.55, dx, dy + dr);
+    ctx.bezierCurveTo(dx - dr * 0.85, dy + dr * 0.55, dx - dr * 0.85, dy,          dx, dy - dr);
+    ctx.fillStyle = '#5ecfc8'; ctx.fill();
+
+    // Droplet shine
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.ellipse(dx - dr * 0.18, dy - dr * 0.1, dr * 0.20, dr * 0.32, -0.4, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(200,250,248,0.65)'; ctx.fill();
+  }
+
+  ctx.restore();
+}
+
 function rrect(ctx, x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x+r, y);
@@ -541,20 +653,9 @@ function drawGrid() {
 
       ctx.restore();
 
-      // Special-piece badge — drawn outside save/restore so alpha is always 1
+      // Special-piece visual overlay — drawn outside save/restore so alpha is always 1
       const spType = getSpecial(r, c);
-      if (spType) {
-        const icon = spType === 'ladybug' ? '🐞' : spType === 'seed' ? '🌱' : '💧';
-        ctx.save();
-        ctx.font = `${Math.max(10, size * 0.38)}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        // Subtle dark shadow so the badge reads on any nug colour
-        ctx.shadowColor = 'rgba(0,0,0,0.75)';
-        ctx.shadowBlur  = 3;
-        ctx.fillText(icon, cx + size * 0.26, cy - size * 0.26);
-        ctx.restore();
-      }
+      if (spType) drawSpecialOverlay(ctx, spType, cx, cy, size);
 
       // Selection ring drawn AFTER restore so no global alpha
       if (isSel) {
