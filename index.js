@@ -861,7 +861,9 @@ function screenFlash(color = 'rgba(111,207,63,0.2)') {
 //  MATCH CASCADE ENGINE
 // ═══════════════════════════════════════════════════════════
 async function processMatches() {
+  let cascadeDepth = 0;
   while (true) {
+    if (++cascadeDepth > 35) { console.warn('NUGZ: cascade depth cap reached'); break; }
     const matched = findMatches(G.grid);
     if (!matched.size) break;
 
@@ -1060,6 +1062,7 @@ function newGame() {
 
   G.cellSize = calcCellSize();
   setActiveCanvas();
+  if (activePopLayer) activePopLayer.innerHTML = '';  // clear stale effect elements
   bindActiveCanvasInput();
   resizeCanvas();
   updateHUD();
@@ -1149,6 +1152,7 @@ async function doSwap(r1, c1, r2, c2) {
     spawnText(4, 2, '🔀 SHUFFLE!', '#5ecfc8', 22);
     SFX.shuffle();
     await sleep(640);
+    G.specials = {};   // clear stale special metadata before replacing the grid
     G.grid = createGrid();
     drawGrid();
   }
@@ -1485,12 +1489,26 @@ function resumeGame() {
       G.nextNugs = Array.from({ length: 9 }, () => randNug());
     }
     gravity(G.grid);  // heal any nulls from a mid-cascade save
-    if (!G.specials) G.specials = {};  // guard for old saves without specials
+    if (!G.specials || typeof G.specials !== 'object') G.specials = {};  // guard for old saves
+    // Sanitize specials: drop any entry whose coords are out-of-bounds or whose
+    // type is unknown.  A corrupted save could otherwise crash activateLadybug /
+    // activateSeed with a TypeError when they index G.grid[r][c].
+    const _VALID_SP = new Set(['ladybug', 'seed', 'water']);
+    for (const key of Object.keys(G.specials)) {
+      const parts = key.split(',');
+      const r = Number(parts[0]), c = Number(parts[1]);
+      if (!Number.isFinite(r) || !Number.isFinite(c) ||
+          r < 0 || r >= ROWS || c < 0 || c >= COLS ||
+          !_VALID_SP.has(G.specials[key])) {
+        delete G.specials[key];
+      }
+    }
     cellAnims  = {};
     _prevMoves = G.moves;
 
     G.cellSize = calcCellSize();
     setActiveCanvas();
+    if (activePopLayer) activePopLayer.innerHTML = '';  // clear stale effect elements
     bindActiveCanvasInput();
     resizeCanvas();
     updateHUD();
