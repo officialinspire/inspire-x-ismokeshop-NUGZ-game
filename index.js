@@ -71,7 +71,7 @@ function bindActiveCanvasInput() {
 }
 
 // ─── SCREEN MANAGER ───────────────────────────────────────
-const SCREEN_IDS = ['intro','menu','game','pause','gameover','levelup','scores','options'];
+const SCREEN_IDS = ['intro','intro2','menu','game','pause','gameover','levelup','scores','options'];
 function showScreen(name) {
   SCREEN_IDS.forEach(id => $(`screen-${id}`)?.classList.remove('active'));
   $(`screen-${name}`)?.classList.add('active');
@@ -1611,7 +1611,7 @@ async function boot() {
   loadSave();
   syncOpts();
 
-  // ── INTRO VIDEO ──────────────────────────────────────────
+  // ── FINAL DESTINATION: MENU ───────────────────────────────
   function goToMenu() {
     showScreen('menu');
     if (!validateSave(savedGame)) {
@@ -1621,6 +1621,83 @@ async function boot() {
     }
   }
 
+  // ── ISMOKESHOP CREDIT VIDEO ───────────────────────────────
+  // Plays after the Inspire intro; fades to black at the end.
+  // Tapping/clicking skips directly to the menu.
+  function startISmoke() {
+    const vid2 = $('intro2Video');
+    if (!vid2) { goToMenu(); return; }
+    showScreen('intro2');
+
+    // Unmute video and start bgMusic on first user gesture
+    const unlock2 = () => {
+      resumeAC();
+      if (G.opts.music && bgMusic?.paused) bgMusic.play().catch(()=>{});
+      if (!vid2.ended && !vid2.paused) vid2.muted = false;
+    };
+    document.addEventListener('click',      unlock2, { once: true });
+    document.addEventListener('touchstart', unlock2, { once: true });
+
+    let gone2 = false;
+    function goToMenuOnce2() {
+      if (gone2) return;
+      gone2 = true;
+      goToMenu();
+    }
+
+    // Try unmuted autoplay, fall back to muted, fall back to skip
+    vid2.play().catch(() => {
+      if (gone2) return;
+      vid2.muted = true;
+      vid2.play().catch(() => goToMenuOnce2());
+    });
+
+    // Fade to black over the last 1.5 s of the video
+    const FADE_DUR = 1.5;
+    let fadeStarted = false;
+    vid2.addEventListener('timeupdate', () => {
+      if (fadeStarted || gone2) return;
+      const dur = vid2.duration;
+      if (!isNaN(dur) && dur > 0) {
+        const remaining = dur - vid2.currentTime;
+        if (remaining <= FADE_DUR) {
+          fadeStarted = true;
+          const fadeEl = $('intro2Fade');
+          if (fadeEl) {
+            fadeEl.style.transition = `opacity ${remaining.toFixed(2)}s linear`;
+            fadeEl.style.opacity = '1';
+          }
+        }
+      }
+    });
+
+    let skipTriggered2 = false;
+    const skip2 = (ev) => {
+      if (skipTriggered2) return;
+      skipTriggered2 = true;
+      if (ev?.cancelable) ev.preventDefault();
+      ev?.stopPropagation?.();
+      vid2.removeEventListener('ended',     skip2);
+      $('screen-intro2')?.removeEventListener('click',      skip2);
+      $('screen-intro2')?.removeEventListener('touchstart', skip2);
+      document.removeEventListener('click',      unlock2);
+      document.removeEventListener('touchstart', unlock2);
+      goToMenuOnce2();
+      requestAnimationFrame(() => {
+        vid2.pause();
+        vid2.removeAttribute('autoplay');
+        vid2.querySelectorAll('source').forEach(s => s.remove());
+        vid2.removeAttribute('src');
+        vid2.load();
+      });
+    };
+    vid2.addEventListener('ended',     skip2);
+    $('screen-intro2')?.addEventListener('click',      skip2);
+    $('screen-intro2')?.addEventListener('touchstart', skip2, { passive: false });
+  }
+
+  // ── INSPIRE INTRO VIDEO ───────────────────────────────────
+  // Plays first; on end or tap transitions to the iSmokeShop credit.
   const vid = $('introVideo');
   if (vid) {
     showScreen('intro');
@@ -1641,22 +1718,22 @@ async function boot() {
     document.addEventListener('click',      unlock, { once: true });
     document.addEventListener('touchstart', unlock, { once: true });
 
-    // Guard against goToMenu() being called twice (e.g. vid.pause() causes
+    // Guard against startISmoke() being called twice (e.g. vid.pause() causes
     // the pending play() promise to reject, which would re-fire the catch handler)
     let gone = false;
-    function goToMenuOnce() {
+    function goToIsmokeOnce() {
       if (gone) return;
       gone = true;
-      goToMenu();
+      startISmoke();
     }
 
     // Try unmuted autoplay first so the video has sound.
     // If the browser blocks unmuted autoplay, mute and retry.
-    // If even muted autoplay is blocked, go straight to the menu.
+    // If even muted autoplay is blocked, skip to the iSmokeShop credit.
     vid.play().catch(() => {
-      if (gone) return; // skip was already triggered — don't retry
+      if (gone) return;
       vid.muted = true;
-      vid.play().catch(() => goToMenuOnce());
+      vid.play().catch(() => goToIsmokeOnce());
     });
 
     let skipTriggered = false;
@@ -1667,15 +1744,15 @@ async function boot() {
       // skip/unlock handlers cannot race each other and stall the transition.
       if (ev?.cancelable) ev.preventDefault();
       ev?.stopPropagation?.();
-      vid.removeEventListener('ended', skip);
-      $('screen-intro')?.removeEventListener('click', skip);
+      vid.removeEventListener('ended',     skip);
+      $('screen-intro')?.removeEventListener('click',      skip);
       $('screen-intro')?.removeEventListener('touchstart', skip);
       // Remove unlock listeners so they can't race against vid.pause() on the
       // same touchstart event (bubbling to document would call vid.muted=false
       // on a video that's mid-pause, causing a media-pipeline freeze on mobile)
       document.removeEventListener('click',      unlock);
       document.removeEventListener('touchstart', unlock);
-      goToMenuOnce(); // transition first so the UI never stalls
+      goToIsmokeOnce(); // transition first so the UI never stalls
       // Full media teardown is more reliable on mobile than pause() during a
       // gesture event, which can freeze Safari/Chrome media pipelines.
       // Remove <source> children and the autoplay attribute BEFORE calling
@@ -1690,15 +1767,15 @@ async function boot() {
         vid.load();
       });
     };
-    vid.addEventListener('ended', skip);
-    $('screen-intro')?.addEventListener('click', skip);
+    vid.addEventListener('ended',     skip);
+    $('screen-intro')?.addEventListener('click',      skip);
     $('screen-intro')?.addEventListener('touchstart', skip, { passive: false });
   } else {
-    // Audio unlock still needed even without intro video
+    // Audio unlock still needed even without Inspire intro video
     const unlock = () => { resumeAC(); if (G.opts.music && bgMusic?.paused) bgMusic.play().catch(()=>{}); };
     document.addEventListener('click',      unlock, { once: true });
     document.addEventListener('touchstart', unlock, { once: true });
-    goToMenu();
+    startISmoke();
   }
 
   // Load all sprites then populate menu decorations (runs in background)
