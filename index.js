@@ -896,6 +896,32 @@ function screenFlash(color = 'rgba(111,207,63,0.2)') {
   el.addEventListener('animationend', () => el.remove(), { once: true });
 }
 
+function safeTimeout(fn, ms) {
+  return window.setTimeout(() => {
+    try { fn(); } catch (e) { console.warn('NUGZ safeTimeout error', e); }
+  }, ms);
+}
+
+function spawnComboFeedback(mr, mc, pts, combo, clearCount, fxBudget) {
+  if (clearCount >= 6) {
+    safeTimeout(() => SFX.bigClear(), 60);
+    if (fxBudget.allowExtraFlash) screenFlash('rgba(255,100,0,0.22)');
+  }
+
+  if (combo >= 2) {
+    safeTimeout(() => SFX.combo(combo), 80);
+    playHaptic('combo');
+
+    const label = COMBO_LABELS[Math.min(combo - 2, COMBO_LABELS.length - 1)];
+    spawnText(mr - 1, mc, `${combo}x ${label}`, '#f5c842', 22);
+    if (fxBudget.allowExtraFlash) screenFlash('rgba(245,200,66,0.09)');
+  } else {
+    playHaptic('swap');
+  }
+
+  spawnText(mr, mc + 1, `+${pts}`, '#9ee060', 18);
+}
+
 // ═══════════════════════════════════════════════════════════
 //  MATCH CASCADE ENGINE
 // ═══════════════════════════════════════════════════════════
@@ -973,22 +999,11 @@ async function processMatches() {
     }
 
     SFX.pop(toProcess.size);
-    if (toProcess.size >= 6) {
-      setTimeout(() => SFX.bigClear(), 60);
-      if (fxBudget.allowExtraFlash) screenFlash('rgba(255,100,0,0.22)');
-    }
-    if (G.combo >= 2) { setTimeout(() => SFX.combo(G.combo), 80); playHaptic('combo'); }
-    else playHaptic('swap');
 
     // Pop text over middle cell
     const midKey = cellsToPop[Math.floor(cellsToPop.length / 2)] || [...toProcess][0];
     const [mr, mc] = midKey.split(',').map(Number);
-    if (G.combo >= 2) {
-      const label = COMBO_LABELS[Math.min(G.combo - 2, COMBO_LABELS.length - 1)];
-      spawnText(mr - 1, mc, `${G.combo}x ${label}`, '#f5c842', 22);
-      if (fxBudget.allowExtraFlash) screenFlash('rgba(245,200,66,0.09)');
-    }
-    spawnText(mr, mc + 1, `+${pts}`, '#9ee060', 18);
+    spawnComboFeedback(mr, mc, pts, G.combo, toProcess.size, fxBudget);
 
     updateHUD();
     await sleep(110);
@@ -1015,7 +1030,7 @@ function highlightStrain(type) {
 
   matches.forEach(el => {
     el.classList.add('active-match');
-    setTimeout(() => el.classList.remove('active-match'), 620);
+    safeTimeout(() => el.classList.remove('active-match'), 620);
   });
 }
 
