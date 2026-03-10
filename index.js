@@ -1248,7 +1248,14 @@ async function boot() {
       vid.play().catch(() => goToMenuOnce());
     });
 
-    const skip = () => {
+    let skipTriggered = false;
+    const skip = (ev) => {
+      if (skipTriggered) return;
+      skipTriggered = true;
+      // On mobile, touchstart is followed by a synthetic click. Suppress it so
+      // skip/unlock handlers cannot race each other and stall the transition.
+      if (ev?.cancelable) ev.preventDefault();
+      ev?.stopPropagation?.();
       vid.removeEventListener('ended', skip);
       $('screen-intro')?.removeEventListener('click', skip);
       $('screen-intro')?.removeEventListener('touchstart', skip);
@@ -1258,13 +1265,17 @@ async function boot() {
       document.removeEventListener('click',      unlock);
       document.removeEventListener('touchstart', unlock);
       goToMenuOnce(); // transition first so the UI never stalls
-      // Defer pause to next frame so the browser paints the new screen before
-      // touching the media pipeline — prevents the main-thread freeze on iOS/Android
-      requestAnimationFrame(() => vid.pause());
+      // Full media teardown is more reliable on mobile than pause() during a
+      // gesture event, which can freeze Safari/Chrome media pipelines.
+      requestAnimationFrame(() => {
+        vid.pause();
+        vid.removeAttribute('src');
+        vid.load();
+      });
     };
     vid.addEventListener('ended', skip);
     $('screen-intro')?.addEventListener('click', skip);
-    $('screen-intro')?.addEventListener('touchstart', skip, { passive: true });
+    $('screen-intro')?.addEventListener('touchstart', skip, { passive: false });
   } else {
     // Audio unlock still needed even without intro video
     const unlock = () => { resumeAC(); if (G.opts.music && bgMusic?.paused) bgMusic.play().catch(()=>{}); };
