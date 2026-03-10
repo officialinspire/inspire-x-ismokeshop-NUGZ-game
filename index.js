@@ -1674,6 +1674,14 @@ async function boot() {
     let skipTriggered2 = false;
     const skip2 = (ev) => {
       if (skipTriggered2) return;
+      // On touch devices, first tap while muted should enable audio instead of
+      // immediately skipping the credit.
+      if (ev?.type === 'touchstart' && vid2.muted && !vid2.ended && !vid2.paused) {
+        if (ev?.cancelable) ev.preventDefault();
+        ev?.stopPropagation?.();
+        unlock2();
+        return;
+      }
       skipTriggered2 = true;
       if (ev?.cancelable) ev.preventDefault();
       ev?.stopPropagation?.();
@@ -1739,6 +1747,14 @@ async function boot() {
     let skipTriggered = false;
     const skip = (ev) => {
       if (skipTriggered) return;
+      // On touch devices, first tap while muted should enable audio instead of
+      // immediately skipping the intro.
+      if (ev?.type === 'touchstart' && vid.muted && !vid.ended && !vid.paused) {
+        if (ev?.cancelable) ev.preventDefault();
+        ev?.stopPropagation?.();
+        unlock();
+        return;
+      }
       skipTriggered = true;
       // On mobile, touchstart is followed by a synthetic click. Suppress it so
       // skip/unlock handlers cannot race each other and stall the transition.
