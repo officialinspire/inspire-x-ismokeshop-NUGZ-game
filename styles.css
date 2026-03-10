@@ -926,13 +926,37 @@ body.on-intro #smokeLayer { display: none; }
   box-shadow: 0 0 0 4px rgba(111,207,63,0.15), 0 0 24px rgba(111,207,63,0.3);
 }
 
-/* Logo area: without the NUGZ text, expand glow ring slightly */
-.logo-glow-ring {
-  width: 320px;
-  height: 80px;
+/* ─── CREATED-BY COLLAB ROW (desktop only) ───────────────── */
+.logo-created-by {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  margin-top: 14px;
 }
-.logo-area .logo-tagline { margin-top: 24px; font-size: 15px; letter-spacing: 8px; }
+.created-by-label {
+  font-family: var(--font-hud); font-size: 9px; font-weight: 700;
+  color: var(--c-muted); letter-spacing: 4px; text-transform: uppercase;
+}
+.collab-logos {
+  display: flex; align-items: center; gap: 14px;
+}
+.collab-logo {
+  height: 28px; opacity: 0.82;
+  filter: drop-shadow(0 0 8px rgba(111,207,63,0.3));
+  transition: opacity .2s, filter .2s;
+}
+.collab-logo:hover { opacity: 1; filter: drop-shadow(0 0 14px rgba(111,207,63,0.65)); }
+.collab-logo--ismoke { height: 34px; }
+.collab-x {
+  font-family: var(--font-hud); font-size: 14px;
+  color: var(--c-muted); opacity: 0.65; line-height: 1;
+}
 
-/* Mobile logo: without NUGZ text, center the sub-label */
+/* ─── DESKTOP HERO AREA: restore full glow ring now NUGZ is back ─ */
+/* (the shrunk overrides below were only needed when NUGZ was absent) */
+.logo-area .logo-tagline { margin-top: 10px; }
+
+/* ─── DESKTOP LEFT PANEL: tighter vertical centering ─────── */
+.menu-desktop-left { gap: 32px; }
+
+/* ─── MOBILE: no NUGZ text title — bg image carries branding ─ */
 .mobile-logo-sub { font-size: 13px; letter-spacing: 5px; margin-top: 0; }
 .mobile-logo-glow { height: 60px; }
