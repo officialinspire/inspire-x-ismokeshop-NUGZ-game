@@ -1267,8 +1267,14 @@ async function boot() {
       goToMenuOnce(); // transition first so the UI never stalls
       // Full media teardown is more reliable on mobile than pause() during a
       // gesture event, which can freeze Safari/Chrome media pipelines.
+      // Remove <source> children and the autoplay attribute BEFORE calling
+      // vid.load() — otherwise load() re-reads the <source> src, autoplay
+      // kicks in, and the video replays (even in a hidden container, some
+      // mobile browsers surface the video or prevent the menu transition).
       requestAnimationFrame(() => {
         vid.pause();
+        vid.removeAttribute('autoplay');
+        vid.querySelectorAll('source').forEach(s => s.remove());
         vid.removeAttribute('src');
         vid.load();
       });
