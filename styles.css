@@ -423,11 +423,15 @@ body.on-intro2 #smokeLayer { display: none; }
   font-family: var(--font-hud); font-size:11px; color:var(--c-gold);
   letter-spacing:4px; margin-top:4px;
   text-shadow: 0 0 10px rgba(245,200,66,0.5);
+  background: rgba(0,0,0,0.35);
+  padding: 4px 10px;
+  border-radius: 999px;
 }
 
 /* Mobile nug row */
 .mobile-nugs-row {
   display:flex; gap:12px; align-items:flex-end; justify-content:center; width:100%;
+  min-height: 52px;
 }
 .mobile-nugs-row img {
   width:48px; height:48px;
@@ -1048,20 +1052,20 @@ body.on-intro2 #smokeLayer { display: none; }
 @media (max-width: 767px) and (orientation: portrait) {
   .menu-mobile {
     justify-content: flex-start;
-    padding-top: max(120px, env(safe-area-inset-top, 0px) + 12vh);
+    padding-top: max(160px, env(safe-area-inset-top, 0px) + 20vh);
     gap: 14px;
   }
 
   .mobile-logo-sub {
-    margin-top: 8px;
+    margin-top: 6px;
   }
 
   .mobile-nugs-row {
-    margin-top: 14px;
+    margin-top: 10px;
   }
 
   .mobile-menu-btns {
-    margin-top: 20px;
+    margin-top: 16px;
   }
 }
 

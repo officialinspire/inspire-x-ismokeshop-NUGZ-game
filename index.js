@@ -1707,6 +1707,25 @@ async function boot() {
   // ── TOUCH TO START GATE ───────────────────────────────────
   // Mobile browsers block autoplay with sound until a user gesture.
   // Require an explicit tap/click before beginning intro playback.
+  function primeVideoPlayback(video) {
+    if (!video) return;
+    try {
+      video.muted = true;
+      video.setAttribute('muted', '');
+      video.setAttribute('playsinline', '');
+      video.setAttribute('webkit-playsinline', '');
+      const maybePlay = video.play();
+      if (maybePlay?.then) {
+        maybePlay
+          .then(() => {
+            video.pause();
+            try { video.currentTime = 0; } catch (_) {}
+          })
+          .catch(() => {});
+      }
+    } catch (_) {}
+  }
+
   const awaitUserStart = () => new Promise(resolve => {
     const gate = $('screen-start');
     const begin = (ev) => {
@@ -1714,6 +1733,7 @@ async function boot() {
       gate?.removeEventListener('click', begin);
       gate?.removeEventListener('touchstart', begin);
       resumeAC();
+      primeVideoPlayback($('introVideo'));
       resolve();
     };
     gate?.addEventListener('click', begin, { once: true });
@@ -1764,10 +1784,26 @@ async function boot() {
     vid.setAttribute('muted', '');
     vid.setAttribute('playsinline', '');
     vid.setAttribute('webkit-playsinline', '');
+    try { vid.currentTime = 0; } catch (_) {}
     vid.play().catch(() => {
       if (gone) return;
       goToIsmokeOnce();
     });
+
+    // Some mobile browsers report play() as successful but keep the first frame
+    // stalled/black after a prior gesture gate. Retry once; if still stalled,
+    // fail forward so the user never gets trapped on a black intro screen.
+    setTimeout(() => {
+      if (gone || vid.ended) return;
+      if (vid.paused || vid.readyState < 2) {
+        vid.play().catch(() => goToIsmokeOnce());
+      }
+    }, 1400);
+
+    vid.addEventListener('error', () => {
+      if (gone) return;
+      goToIsmokeOnce();
+    }, { once: true });
 
     let skipTriggered = false;
     const skip = (ev) => {
