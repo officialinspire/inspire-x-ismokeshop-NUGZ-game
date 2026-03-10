@@ -27,8 +27,12 @@ const LEVEL_MSGS  = [
 const COMBO_LABELS = ['DANK!','FIRE! 🔥','LIT! 🌿','BLAZED! 💨','STONED!','COOKED! 🍃','RIPPED!','LEGENDARY! 🏆'];
 
 // ─── LAYOUT DETECTION ─────────────────────────────────────
-const isMobile = () =>
-  window.innerWidth < 768 || (window.innerHeight <= 500 && window.innerWidth < window.innerHeight * 2);
+const isMobile = () => {
+  if (window.innerWidth < 768) return true;
+  if (window.innerHeight <= 500 &&
+      window.matchMedia('(orientation: landscape)').matches) return true;
+  return false;
+};
 
 // ─── GLOBAL STATE ─────────────────────────────────────────
 const G = {
