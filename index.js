@@ -1806,8 +1806,19 @@ async function boot() {
     }, { once: true });
 
     let skipTriggered = false;
+    // On mobile, the same tap used on the start gate can emit a delayed
+    // synthetic click after we switch to the intro screen. Ignore early skip
+    // gestures briefly so the Inspire video always starts instead of being
+    // skipped immediately into the iSmoke credit.
+    let introSkipArmed = false;
+    const introSkipArmTimer = setTimeout(() => { introSkipArmed = true; }, 650);
     const skip = (ev) => {
       if (skipTriggered) return;
+      if (ev?.type !== 'ended' && !introSkipArmed) {
+        if (ev?.cancelable) ev.preventDefault();
+        ev?.stopPropagation?.();
+        return;
+      }
       // On touch devices, first tap while muted should enable audio instead of
       // immediately skipping the intro.
       if (ev?.type === 'touchstart' && vid.muted && !vid.ended && !vid.paused) {
@@ -1829,6 +1840,7 @@ async function boot() {
       // on a video that's mid-pause, causing a media-pipeline freeze on mobile)
       document.removeEventListener('click',      unlock);
       document.removeEventListener('touchstart', unlock);
+      clearTimeout(introSkipArmTimer);
       goToIsmokeOnce(); // transition first so the UI never stalls
       // Full media teardown is more reliable on mobile than pause() during a
       // gesture event, which can freeze Safari/Chrome media pipelines.
