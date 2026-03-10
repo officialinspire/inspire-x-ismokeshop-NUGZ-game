@@ -1756,13 +1756,17 @@ async function boot() {
       startISmoke();
     }
 
-    // Try unmuted autoplay first so the video has sound.
-    // If the browser blocks unmuted autoplay, mute and retry.
-    // If even muted autoplay is blocked, skip to the iSmokeShop credit.
+    // Mobile Safari/Chrome can report a successful play() call for unmuted media,
+    // then keep the element paused/black when user-activation has already been
+    // consumed by a prior "Tap to Start" handler. Starting muted first is more
+    // reliable across mobile browsers, then a later tap can unmute via unlock().
+    vid.muted = true;
+    vid.setAttribute('muted', '');
+    vid.setAttribute('playsinline', '');
+    vid.setAttribute('webkit-playsinline', '');
     vid.play().catch(() => {
       if (gone) return;
-      vid.muted = true;
-      vid.play().catch(() => goToIsmokeOnce());
+      goToIsmokeOnce();
     });
 
     let skipTriggered = false;
