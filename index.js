@@ -731,6 +731,8 @@ function newGame() {
   showScreen('game');
   SFX.newGame();
   vib([20,10,40,10,70]);
+  // Save immediately so Resume is valid even if the player exits before the first move.
+  saveGame();
 }
 
 async function doSwap(r1, c1, r2, c2) {
@@ -860,8 +862,10 @@ function loadSave() {
 }
 
 function validateSave(save) {
-  // Must have a valid grid and nextNugs; if corrupt, return false
+  // Validate on grid structure and score only — never on `running`,
+  // so paused saves (running===false) are accepted correctly.
   if (!save) return false;
+  if (typeof save.score !== 'number') return false;
   if (!Array.isArray(save.grid) || save.grid.length !== ROWS) return false;
   for (let r = 0; r < ROWS; r++) {
     if (!Array.isArray(save.grid[r]) || save.grid[r].length !== COLS) return false;
@@ -870,7 +874,6 @@ function validateSave(save) {
       if (cell !== null && !NUG_TYPES.includes(cell)) return false;
     }
   }
-  if (!Array.isArray(save.nextNugs) || save.nextNugs.length === 0) return false;
   return true;
 }
 
@@ -1085,20 +1088,27 @@ document.querySelectorAll('.menu-btn, .mbtn, .modal-btn, .side-btn').forEach(btn
 // New Game
 on(['btnNewGame-d','btnNewGame-m'], () => { resumeAC(); newGame(); });
 
-// Resume
-on(['btnResume-d','btnResume-m'], () => {
-  resumeAC();
+// resumeGame — extracted so it can be called from the button handler.
+// Fix: removed `save.running !== false` gate so paused saves are accepted.
+// Fix: restores G.running=true / G.animating=false for a playable state.
+// Fix: preserves G.opts — never overwrites with stale saved options.
+// Fix: corrupt/missing saves are wiped from storage and Resume is disabled.
+function resumeGame() {
   const save = loadSave();
-  if (validateSave(save) && save.running !== false) {
-    // Preserve current opts — only restore gameplay state
+  if (validateSave(save)) {
+    // Preserve current options — only restore gameplay state
     const currentOpts = { ...G.opts };
     Object.assign(G, save);
-    G.opts      = currentOpts;   // ← FIX: don't restore stale opts from save
-    G.running   = true;
+    G.opts      = currentOpts;  // protect: don't restore stale opts from save
+    G.running   = true;         // restore playable state regardless of how it was saved
     G.animating = false;
-    gravity(G.grid);  // heal any nulls from mid-cascade save
-    cellAnims   = {};
-    _prevMoves  = G.moves;
+    // Ensure nextNugs exists (guard for saves made before Fix 3 landed)
+    if (!Array.isArray(G.nextNugs) || G.nextNugs.length === 0) {
+      G.nextNugs = Array.from({ length: 9 }, () => randNug());
+    }
+    gravity(G.grid);  // heal any nulls from a mid-cascade save
+    cellAnims  = {};
+    _prevMoves = G.moves;
 
     G.cellSize = calcCellSize();
     setActiveCanvas();
@@ -1110,19 +1120,23 @@ on(['btnResume-d','btnResume-m'], () => {
     showScreen('game');
     SFX.select();
   } else {
-    // Show "no save" feedback briefly
+    // Corrupt / missing save — wipe it so it cannot be retried, then
+    // permanently disable the Resume buttons and show the NO SAVE message.
+    try { localStorage.removeItem('nugz_save'); } catch(e) {}
+    savedGame = null;
     ['btnResume-d','btnResume-m'].forEach(id => {
       const b = $(id); if (!b) return;
-      const orig = b.innerHTML;
       b.innerHTML = b.classList.contains('mbtn')
         ? '❌ NO SAVE'
         : '<span class="btn-icon">❌</span><span class="btn-label">NO SAVE</span>';
-      b.style.opacity = '0.55';
-      SFX.invalid();
-      setTimeout(() => { b.innerHTML = orig; b.style.opacity = ''; }, 2000);
+      b.style.opacity = '0.42';
     });
+    SFX.invalid();
   }
-});
+}
+
+// Resume
+on(['btnResume-d','btnResume-m'], () => { resumeAC(); resumeGame(); });
 
 // High Scores
 on(['btnHighScore-d','btnHighScore-m'], () => { renderScores(); showScreen('scores'); SFX.select(); });
