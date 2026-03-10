@@ -1144,7 +1144,15 @@ $('optMusicVol')?.addEventListener('input', e => {
 // Quit
 on(['btnQuit-d','btnQuit-m'], () => {
   resumeAC();
-  if (confirm('Quit NUGZ? 🌿')) { saveGame(); window.close(); }
+  if (confirm('Quit NUGZ? 🌿')) {
+    saveGame();
+    // window.close() only works for script-opened tabs.
+    // Fall back to redirecting to the shop after a short delay.
+    window.close();
+    setTimeout(() => {
+      try { window.location.href = 'https://www.ismokeshop.net'; } catch(e) {}
+    }, 300);
+  }
 });
 
 // Pause
