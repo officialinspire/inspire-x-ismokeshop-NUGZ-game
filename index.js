@@ -1215,10 +1215,16 @@ async function boot() {
     showScreen('intro');
 
     // Audio context must be unlocked by first user gesture; also unmute video if it
-    // had to start muted for autoplay compliance
+    // had to start muted for autoplay compliance.
+    // Only start bgMusic if it isn't already playing — prevents a double-play glitch
+    // when skip() and unlock() both fire from the same tap (skip goes first via
+    // bubbling and already starts music via handleMusic; unlock just fills the gap
+    // for cases where the first play() was blocked by autoplay policy).
+    // A single mobile tap also synthesizes a click after touchstart, so without the
+    // paused-guard bgMusic.play() would be called twice, causing an audible stutter.
     const unlock = () => {
       resumeAC();
-      if (G.opts.music) toggleMusic(true);
+      if (G.opts.music && bgMusic?.paused) bgMusic.play().catch(()=>{});
       if (!vid.ended && !vid.paused) vid.muted = false;
     };
     document.addEventListener('click',      unlock, { once: true });
@@ -1254,7 +1260,7 @@ async function boot() {
     $('screen-intro')?.addEventListener('touchstart', skip, { passive: true });
   } else {
     // Audio unlock still needed even without intro video
-    const unlock = () => { resumeAC(); if (G.opts.music) toggleMusic(true); };
+    const unlock = () => { resumeAC(); if (G.opts.music && bgMusic?.paused) bgMusic.play().catch(()=>{}); };
     document.addEventListener('click',      unlock, { once: true });
     document.addEventListener('touchstart', unlock, { once: true });
     goToMenu();
