@@ -755,11 +755,16 @@ async function doSwap(r1, c1, r2, c2) {
     drawGrid();
   }
 
-  saveGame();
   G.animating = false;
-  G.nextNugs.shift();
-  G.nextNugs.push(randNug());
-  updateNextDisplay();
+  // Only advance the preview queue on regular moves, not level-ups.
+  // doLevelUp sets G.running = false; if still false here, a level-up
+  // or game-over just fired — don't consume an extra preview nug.
+  if (G.running) {
+    G.nextNugs.shift();
+    G.nextNugs.push(randNug());
+    updateNextDisplay();
+  }
+  saveGame();
 }
 
 async function doLevelUp() {
