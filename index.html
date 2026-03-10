@@ -100,8 +100,8 @@
             <button class="menu-btn" id="btnOptions-d">
               <span class="btn-icon">⚙️</span><span class="btn-label">OPTIONS</span><span class="btn-arrow">▶</span>
             </button>
-            <button class="menu-btn menu-btn--quit" id="btnQuit-d">
-              <span class="btn-icon">✕</span><span class="btn-label">QUIT</span>
+            <button class="menu-btn menu-btn--outline" id="btnHowTo-d">
+              <span class="btn-icon">📘</span><span class="btn-label">HOW TO PLAY</span><span class="btn-arrow">▶</span>
             </button>
           </nav>
           <div class="menu-panel-footer">
@@ -130,7 +130,7 @@
         <button class="mbtn" id="btnResume-m">▶ RESUME</button>
         <button class="mbtn" id="btnHighScore-m">🏆 HIGH SCORES</button>
         <button class="mbtn mbtn--outline" id="btnOptions-m">⚙️ OPTIONS</button>
-        <button class="mbtn mbtn--ghost" id="btnQuit-m">✕ QUIT</button>
+        <button class="mbtn mbtn--outline" id="btnHowTo-m">📘 HOW TO PLAY</button>
       </div>
       <div class="mobile-footer">
         <span class="footer-created-label">CREATED BY</span>
@@ -289,7 +289,10 @@
       <div class="modal-title">⏸ PAUSED</div>
       <button class="modal-btn modal-btn--primary" id="btnResumePause">▶ RESUME</button>
       <button class="modal-btn" id="btnRestartPause">🔄 RESTART</button>
+      <button class="modal-btn" id="btnHowToPause">📘 HOW TO PLAY</button>
+      <button class="modal-btn" id="btnStatsPause">📊 GAME STATS</button>
       <button class="modal-btn modal-btn--outline" id="btnMenuPause">🏠 MAIN MENU</button>
+      <button class="modal-btn modal-btn--danger" id="btnQuitPause">✕ QUIT</button>
     </div>
   </div>
 
@@ -337,6 +340,40 @@
       <div class="modal-title">🏆 HIGH SCORES</div>
       <div id="scoresList" class="scores-list"></div>
       <button class="modal-btn modal-btn--outline" id="btnScoresBack">← BACK</button>
+    </div>
+  </div>
+
+  <!-- HOW TO PLAY -->
+  <div id="screen-howto" class="screen overlay-screen">
+    <div class="modal modal--info">
+      <div class="modal-title">📘 HOW TO PLAY</div>
+      <div class="info-stack">
+        <div class="info-card"><span class="info-icon">🖱️</span><span>Click or tap a nug to select it</span></div>
+        <div class="info-card"><span class="info-icon">↔️</span><span>Select an adjacent nug to swap</span></div>
+        <div class="info-card"><span class="info-icon">🌿</span><span>Match 3 or more nugz to clear them</span></div>
+        <div class="info-card"><span class="info-icon">⚡</span><span>Chain reactions build bigger combo bonuses</span></div>
+        <div class="info-card"><span class="info-icon">⬆️</span><span>Fill the progress bar to level up</span></div>
+        <div class="info-card"><span class="info-icon">💨</span><span>Watch your puff count so you do not burn out</span></div>
+        <div class="info-card"><span class="info-icon">🐞</span><span>Use special nugz and powerups to trigger bigger clears</span></div>
+      </div>
+      <button class="modal-btn modal-btn--outline" id="btnHowToBack">← BACK</button>
+    </div>
+  </div>
+
+  <!-- GAME STATS -->
+  <div id="screen-stats" class="screen overlay-screen">
+    <div class="modal modal--info">
+      <div class="modal-title">📊 GAME STATS</div>
+      <div class="stats-grid">
+        <div class="stat-row"><span>SCORE</span><span id="statsScore">0</span></div>
+        <div class="stat-row"><span>BEST SCORE</span><span id="statsBest">0</span></div>
+        <div class="stat-row"><span>LEVEL</span><span id="statsLevel">1</span></div>
+        <div class="stat-row"><span>PUFFS LEFT</span><span id="statsMoves">30</span></div>
+        <div class="stat-row"><span>LEVEL PROGRESS</span><span id="statsGoal">0 / 20</span></div>
+        <div class="stat-row"><span>MAX COMBO</span><span id="statsMaxCombo">0x</span></div>
+        <div class="stat-row"><span>NUGZ CLEARED</span><span id="statsCleared">0</span></div>
+      </div>
+      <button class="modal-btn modal-btn--outline" id="btnStatsBack">← BACK</button>
     </div>
   </div>
 
