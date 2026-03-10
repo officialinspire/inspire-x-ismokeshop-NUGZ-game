@@ -59,6 +59,7 @@ let savedGame   = null;
 let images      = {};
 let cellAnims   = {};
 let activeCanvas, activePopLayer;
+let strainElsByType = null;
 // Track previous moves count to fire lowPuffs SFX only on the transition to 5
 let _prevMoves  = 30;
 
@@ -936,7 +937,7 @@ async function processMatches() {
 
     // Cells that will hold a new special piece are NOT popped — they stay on the board
     const cellsToPop = [...toProcess].filter(k => !specialKeys.has(k));
-    const types = [...toProcess].map(k => {
+    const clearTypes = [...toProcess].map(k => {
       const [r, c] = k.split(',').map(Number);
       return G.grid[r][c];
     });
@@ -949,12 +950,11 @@ async function processMatches() {
     G.cleared      += toProcess.size;
     G.totalCleared += toProcess.size;
 
+    highlightStrainsBatch(clearTypes, fxBudget);
+
     // Clear matched cells; skip cells that are becoming new specials
-    let ti = 0;
     for (const k of toProcess) {
       const [r, c] = k.split(',').map(Number);
-      if (fxBudget.allowStrainFx) highlightStrain(types[ti++]);
-      else ti++;
       if (specialKeys.has(k)) continue; // this cell becomes a special — keep its nug
       spawnFireParticles(r, c, fxBudget.fireParticlesPerCell);
       clearSpecial(r, c); // remove any stale sidecar entry
@@ -998,13 +998,33 @@ async function processMatches() {
   }
 }
 
-function highlightStrain(type) {
+function cacheStrainEls() {
+  strainElsByType = {};
   document.querySelectorAll('.strain-item').forEach(el => {
-    if (el.dataset.type === type) {
-      el.classList.add('active-match');
-      setTimeout(() => el.classList.remove('active-match'), 620);
-    }
+    const type = el.dataset.type;
+    if (!type) return;
+    if (!strainElsByType[type]) strainElsByType[type] = [];
+    strainElsByType[type].push(el);
   });
+}
+
+function highlightStrain(type) {
+  if (!strainElsByType || !type) return;
+  const matches = strainElsByType[type];
+  if (!matches?.length) return;
+
+  matches.forEach(el => {
+    el.classList.add('active-match');
+    setTimeout(() => el.classList.remove('active-match'), 620);
+  });
+}
+
+function highlightStrainsBatch(types, fxBudget) {
+  if (!fxBudget?.allowStrainFx) return;
+  if (!Array.isArray(types) || !types.length) return;
+
+  const uniqueTypes = new Set(types);
+  uniqueTypes.forEach(type => highlightStrain(type));
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -1822,6 +1842,7 @@ async function boot() {
   // Load all sprites then populate menu decorations (runs in background)
   await loadImages();
   initMenuNugs();
+  cacheStrainEls();
 }
 
 setActiveCanvas();
