@@ -968,8 +968,10 @@ async function processMatches() {
       return G.grid[r][c];
     });
     const fxBudget = getFxBudget(toProcess.size);
+    const isHeavyClear = toProcess.size >= PERF.heavyComboThreshold;
 
     await animPop(cellsToPop);
+    if (isHeavyClear) await nextFrame();
 
     const pts = Math.floor(toProcess.size * 10 * Math.pow(G.combo, 1.45));
     G.score        += pts;
@@ -986,6 +988,7 @@ async function processMatches() {
       clearSpecial(r, c); // remove any stale sidecar entry
       G.grid[r][c] = null;
     }
+    if (isHeavyClear) await nextFrame();
 
     // Register new specials into the sidecar (their nug remains in G.grid)
     for (const { key, type } of newSpecials) {
@@ -1008,8 +1011,10 @@ async function processMatches() {
     updateHUD();
     await sleep(110);
     gravity(G.grid);
+    if (isHeavyClear) await nextFrame();
     await sleep(90);
     if (G.cleared >= G.goal) break;
+    if (isHeavyClear && findMatches(G.grid).size) await nextFrame();
   }
 }
 
@@ -1043,6 +1048,9 @@ function highlightStrainsBatch(types, fxBudget) {
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+function nextFrame() {
+  return new Promise(resolve => requestAnimationFrame(() => resolve()));
+}
 
 function debounce(fn, ms) {
   let t;
