@@ -41,6 +41,7 @@ const G = {
   combo:0, maxCombo:0,
   running:false, selected:null, animating:false,
   nextNugs:[], cellSize:64,
+  specials: {},                   // sidecar: "r,c" → 'ladybug'|'seed'|'water'
   opts:{ sound:true, music:true, vibrate:true, effects:true, musicVol:0.6 }
 };
 let highScores = [];
@@ -221,17 +222,173 @@ function findMatches(g) {
   return m;
 }
 
+// ═══════════════════════════════════════════════════════════
+//  SECTION 2 — SPECIAL-PIECE HELPERS
+//  G.specials is a sidecar map: "r,c" → type string.
+//  The grid itself keeps the nug color; specials only add metadata.
+// ═══════════════════════════════════════════════════════════
+function setSpecial(r, c, type) { G.specials[`${r},${c}`] = type; }
+function getSpecial(r, c)       { return G.specials[`${r},${c}`] || null; }
+function clearSpecial(r, c)     { delete G.specials[`${r},${c}`]; }
+
+// ═══════════════════════════════════════════════════════════
+//  SECTION 3 — MATCH-SHAPE ANALYSIS
+//  Scans the set of matched cells, finds individual runs, and
+//  determines which special type (if any) each run should spawn.
+//  Priority: seed (5+) > water (L/T intersection) > ladybug (4).
+// ═══════════════════════════════════════════════════════════
+function analyzeMatchesForSpecials(g, matchedSet) {
+  const result = [];
+
+  // Collect horizontal runs of 3+ fully within matchedSet
+  const hRuns = [];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS - 2; c++) {
+      const t = g[r][c];
+      if (!t || !matchedSet.has(`${r},${c}`)) continue;
+      if (c > 0 && g[r][c-1] === t && matchedSet.has(`${r},${c-1}`)) continue; // not start
+      let l = 1;
+      while (c + l < COLS && g[r][c+l] === t) l++;
+      if (l >= 3) {
+        const cells = Array.from({ length: l }, (_, i) => `${r},${c+i}`);
+        if (cells.every(k => matchedSet.has(k))) hRuns.push({ cells, l });
+      }
+    }
+  }
+
+  // Collect vertical runs of 3+ fully within matchedSet
+  const vRuns = [];
+  for (let c = 0; c < COLS; c++) {
+    for (let r = 0; r < ROWS - 2; r++) {
+      const t = g[r][c];
+      if (!t || !matchedSet.has(`${r},${c}`)) continue;
+      if (r > 0 && g[r-1][c] === t && matchedSet.has(`${r-1},${c}`)) continue; // not start
+      let l = 1;
+      while (r + l < ROWS && g[r+l][c] === t) l++;
+      if (l >= 3) {
+        const cells = Array.from({ length: l }, (_, i) => `${r+i},${c}`);
+        if (cells.every(k => matchedSet.has(k))) vRuns.push({ cells, l });
+      }
+    }
+  }
+
+  const assigned = new Set();
+
+  // 1. Seed: any run of 5+ cells
+  for (const run of [...hRuns, ...vRuns]) {
+    if (run.l >= 5) {
+      const center = run.cells[Math.floor(run.cells.length / 2)];
+      if (!assigned.has(center)) { result.push({ key: center, type: 'seed' }); assigned.add(center); }
+    }
+  }
+
+  // 2. Water: cell that belongs to both a horizontal AND vertical run (L or T)
+  const hSet = new Set(hRuns.flatMap(r => r.cells));
+  const vSet = new Set(vRuns.flatMap(r => r.cells));
+  for (const k of hSet) {
+    if (vSet.has(k) && !assigned.has(k)) {
+      result.push({ key: k, type: 'water' });
+      assigned.add(k);
+    }
+  }
+
+  // 3. Ladybug: any run of exactly 4
+  for (const run of [...hRuns, ...vRuns]) {
+    if (run.l === 4) {
+      const center = run.cells[Math.floor(run.cells.length / 2)];
+      if (!assigned.has(center)) { result.push({ key: center, type: 'ladybug' }); assigned.add(center); }
+    }
+  }
+
+  return result;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SECTION 4 — SPECIAL ACTIVATION LOGIC
+//  Each function removes the special from the sidecar and
+//  returns an array of "r,c" keys to clear from the grid.
+// ═══════════════════════════════════════════════════════════
+
+// Ladybug — clears the row or column with more filled cells.
+// Theme: ladybugs patrol a full row/column eating pests.
+function activateLadybug(r, c) {
+  clearSpecial(r, c);
+  let rowFill = 0, colFill = 0;
+  for (let cc = 0; cc < COLS; cc++) if (G.grid[r][cc]) rowFill++;
+  for (let rr = 0; rr < ROWS; rr++) if (G.grid[rr][c]) colFill++;
+  const keys = [];
+  if (rowFill >= colFill) {
+    for (let cc = 0; cc < COLS; cc++) keys.push(`${r},${cc}`);
+    spawnText(r, 3, '🐞 ROW CLEARED!', '#ff6655', 20);
+  } else {
+    for (let rr = 0; rr < ROWS; rr++) keys.push(`${rr},${c}`);
+    spawnText(Math.floor(ROWS/2), c, '🐞 COL!', '#ff6655', 20);
+  }
+  SFX.bigClear();
+  return keys;
+}
+
+// Magic Seed — clears every nug of the same color on the board.
+// Theme: a magic seed spreads growth to every matching plant.
+function activateSeed(r, c) {
+  clearSpecial(r, c);
+  const color = G.grid[r][c];
+  const keys = [];
+  for (let rr = 0; rr < ROWS; rr++)
+    for (let cc = 0; cc < COLS; cc++)
+      if (G.grid[rr][cc] === color) keys.push(`${rr},${cc}`);
+  spawnText(r, c, '🌱 SEEDED!', '#88ff44', 22);
+  SFX.bigClear();
+  return keys;
+}
+
+// Water Drop — clears a 3×3 area centered on the drop.
+// Theme: explosive watering causes rapid growth (and clearing).
+function activateWater(r, c) {
+  clearSpecial(r, c);
+  const keys = [];
+  for (let dr = -1; dr <= 1; dr++)
+    for (let dc = -1; dc <= 1; dc++) {
+      const nr = r + dr, nc = c + dc;
+      if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS) keys.push(`${nr},${nc}`);
+    }
+  spawnText(r, c, '💧 SPLASH!', '#5ecfc8', 22);
+  SFX.bigClear();
+  return keys;
+}
+
+// Dispatch any special at position (r,c); returns cells to add to the clear set.
+function triggerSpecial(r, c) {
+  const type = getSpecial(r, c);
+  if (!type) return [];
+  if (type === 'ladybug') return activateLadybug(r, c);
+  if (type === 'seed')    return activateSeed(r, c);
+  if (type === 'water')   return activateWater(r, c);
+  return [];
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SECTION 5 — GRAVITY WITH SPECIALS METADATA
+//  When a nug falls from row A to row B, its sidecar entry
+//  travels with it so the special remains attached.
+// ═══════════════════════════════════════════════════════════
 function gravity(g) {
   for (let c = 0; c < COLS; c++) {
-    // Compact: pull non-null cells down
+    // Pull non-null cells downward; move their special metadata too
     for (let r = ROWS - 1; r > 0; r--) {
       if (!g[r][c]) {
         let a = r - 1;
         while (a >= 0 && !g[a][c]) a--;
-        if (a >= 0) { g[r][c] = g[a][c]; g[a][c] = null; }
+        if (a >= 0) {
+          g[r][c] = g[a][c]; g[a][c] = null;
+          // Carry special sidecar entry along with the nug
+          const sp = getSpecial(a, c);
+          clearSpecial(a, c);
+          if (sp) setSpecial(r, c, sp);
+        }
       }
     }
-    // Fill remaining empty cells at top
+    // Fill empty top cells with fresh nugs (no special)
     for (let r = 0; r < ROWS; r++) {
       if (!g[r][c]) g[r][c] = randNug();
     }
@@ -383,6 +540,21 @@ function drawGrid() {
       }
 
       ctx.restore();
+
+      // Special-piece badge — drawn outside save/restore so alpha is always 1
+      const spType = getSpecial(r, c);
+      if (spType) {
+        const icon = spType === 'ladybug' ? '🐞' : spType === 'seed' ? '🌱' : '💧';
+        ctx.save();
+        ctx.font = `${Math.max(10, size * 0.38)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        // Subtle dark shadow so the badge reads on any nug colour
+        ctx.shadowColor = 'rgba(0,0,0,0.75)';
+        ctx.shadowBlur  = 3;
+        ctx.fillText(icon, cx + size * 0.26, cy - size * 0.26);
+        ctx.restore();
+      }
 
       // Selection ring drawn AFTER restore so no global alpha
       if (isSel) {
@@ -573,34 +745,75 @@ async function processMatches() {
     G.combo++;
     if (G.combo > G.maxCombo) G.maxCombo = G.combo;
 
-    const cells = [...matched];
-    const types = cells.map(k => {
-      const [r,c] = k.split(',').map(Number);
+    // --- Expand clear set by chaining any specials in the matched zone ---
+    // We iterate until no new specials fire (handles stacked/adjacent specials).
+    const toProcess = new Set(matched);
+    const alreadyTriggered = new Set();
+    let expanded = true;
+    while (expanded) {
+      expanded = false;
+      for (const key of [...toProcess]) {
+        const [r, c] = key.split(',').map(Number);
+        if (getSpecial(r, c) && !alreadyTriggered.has(key)) {
+          alreadyTriggered.add(key);
+          const extra = triggerSpecial(r, c); // also removes from G.specials
+          extra.forEach(k => { if (!toProcess.has(k)) { toProcess.add(k); expanded = true; } });
+        }
+      }
+    }
+
+    // --- Determine new specials born from this match (before we clear) ---
+    // Analyse only the original findMatches result (not the special expansions)
+    // so shape detection reflects the player's actual swap geometry.
+    const newSpecials = analyzeMatchesForSpecials(G.grid, matched);
+    // Only place a new special where no old special was already triggered
+    const specialKeys = new Set(
+      newSpecials.filter(s => !alreadyTriggered.has(s.key)).map(s => s.key)
+    );
+
+    // Cells that will hold a new special piece are NOT popped — they stay on the board
+    const cellsToPop = [...toProcess].filter(k => !specialKeys.has(k));
+    const types = [...toProcess].map(k => {
+      const [r, c] = k.split(',').map(Number);
       return G.grid[r][c];
     });
 
-    await animPop(cells);
+    await animPop(cellsToPop);
 
-    const pts = Math.floor(matched.size * 10 * Math.pow(G.combo, 1.45));
-    G.score         += pts;
-    G.cleared       += matched.size;
-    G.totalCleared  += matched.size;
+    const pts = Math.floor(toProcess.size * 10 * Math.pow(G.combo, 1.45));
+    G.score        += pts;
+    G.cleared      += toProcess.size;
+    G.totalCleared += toProcess.size;
 
-    // Clear matched cells from grid, spawn effects
-    cells.forEach((k, i) => {
-      const [r,c] = k.split(',').map(Number);
+    // Clear matched cells; skip cells that are becoming new specials
+    let ti = 0;
+    for (const k of toProcess) {
+      const [r, c] = k.split(',').map(Number);
+      highlightStrain(types[ti++]);
+      if (specialKeys.has(k)) continue; // this cell becomes a special — keep its nug
       spawnFireParticles(r, c);
+      clearSpecial(r, c); // remove any stale sidecar entry
       G.grid[r][c] = null;
-      highlightStrain(types[i]);
-    });
+    }
 
-    SFX.pop(matched.size);
-    if (matched.size >= 6) { setTimeout(() => SFX.bigClear(), 60); screenFlash('rgba(255,100,0,0.22)'); }
+    // Register new specials into the sidecar (their nug remains in G.grid)
+    for (const { key, type } of newSpecials) {
+      if (!alreadyTriggered.has(key)) {
+        const [r, c] = key.split(',').map(Number);
+        setSpecial(r, c, type);
+        const icon = type === 'ladybug' ? '🐞' : type === 'seed' ? '🌱' : '💧';
+        spawnText(r, c - 1, `${icon}`, '#ffffff', 26);
+        screenFlash('rgba(111,207,63,0.12)');
+      }
+    }
+
+    SFX.pop(toProcess.size);
+    if (toProcess.size >= 6) { setTimeout(() => SFX.bigClear(), 60); screenFlash('rgba(255,100,0,0.22)'); }
     if (G.combo >= 2) { setTimeout(() => SFX.combo(G.combo), 80); vib([30,20,55]); }
     else vib(30);
 
     // Pop text over middle cell
-    const midKey = cells[Math.floor(cells.length / 2)];
+    const midKey = cellsToPop[Math.floor(cellsToPop.length / 2)] || [...toProcess][0];
     const [mr, mc] = midKey.split(',').map(Number);
     if (G.combo >= 2) {
       const label = COMBO_LABELS[Math.min(G.combo - 2, COMBO_LABELS.length - 1)];
@@ -718,6 +931,7 @@ function newGame() {
   G.selected     = null;
   G.animating    = false;
   G.nextNugs     = Array.from({ length: 9 }, () => randNug());
+  G.specials     = {};
   cellAnims      = {};
   _prevMoves     = 30;
 
@@ -742,14 +956,28 @@ async function doSwap(r1, c1, r2, c2) {
   spawnDeselectFX(r1, c1);
   G.selected = null;
 
+  // Capture any specials on the two cells before the swap
+  const sp1 = getSpecial(r1, c1);
+  const sp2 = getSpecial(r2, c2);
+
+  // Move grid values and their sidecar specials atomically
   swapCells(G.grid, r1, c1, r2, c2);
+  clearSpecial(r1, c1); clearSpecial(r2, c2);
+  if (sp1) setSpecial(r2, c2, sp1);
+  if (sp2) setSpecial(r1, c1, sp2);
+
   SFX.swap(); vib(15);
   await animSwap(r1, c1, r2, c2);
 
-  // Check if swap produces any match
-  if (!findMatches(G.grid).size) {
-    // No match — reverse
+  const hasMatch   = findMatches(G.grid).size > 0;
+  const hasSpecial = !!(sp1 || sp2);
+
+  // No match and no special involved — reverse the swap
+  if (!hasMatch && !hasSpecial) {
     swapCells(G.grid, r1, c1, r2, c2);
+    clearSpecial(r1, c1); clearSpecial(r2, c2);
+    if (sp1) setSpecial(r1, c1, sp1);
+    if (sp2) setSpecial(r2, c2, sp2);
     SFX.invalid(); vib([20,20,20]);
     await animSwap(r1, c1, r2, c2);
     drawGrid();
@@ -758,6 +986,33 @@ async function doSwap(r1, c1, r2, c2) {
   }
 
   G.moves--;
+
+  // If there is no regular match but a special was swapped, fire it directly
+  if (!hasMatch && hasSpecial) {
+    G.combo = 1;
+    const toProcess = new Set();
+    // sp1 is now at (r2,c2), sp2 is now at (r1,c1)
+    if (sp1) triggerSpecial(r2, c2).forEach(k => toProcess.add(k));
+    if (sp2) triggerSpecial(r1, c1).forEach(k => toProcess.add(k));
+
+    if (toProcess.size) {
+      await animPop([...toProcess]);
+      const pts = Math.floor(toProcess.size * 10);
+      G.score += pts; G.cleared += toProcess.size; G.totalCleared += toProcess.size;
+      for (const k of toProcess) {
+        const [r, c] = k.split(',').map(Number);
+        spawnFireParticles(r, c);
+        clearSpecial(r, c);
+        G.grid[r][c] = null;
+      }
+      SFX.pop(toProcess.size);
+      updateHUD();
+      await sleep(110);
+      gravity(G.grid);
+      await sleep(90);
+    }
+  }
+
   await processMatches();
   drawGrid();
 
@@ -1107,6 +1362,7 @@ function resumeGame() {
       G.nextNugs = Array.from({ length: 9 }, () => randNug());
     }
     gravity(G.grid);  // heal any nulls from a mid-cascade save
+    if (!G.specials) G.specials = {};  // guard for old saves without specials
     cellAnims  = {};
     _prevMoves = G.moves;
 
