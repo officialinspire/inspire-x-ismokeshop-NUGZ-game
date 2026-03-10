@@ -1806,7 +1806,7 @@ async function boot() {
   }
 
   const SKIP_GHOST_THRESHOLD_MS = 1000;
-  const skipInputEvent = window.PointerEvent ? 'pointerup' : 'click';
+  const bootInputEvents = window.PointerEvent ? ['pointerup', 'click'] : ['click'];
   const bootFlow = {
     activeVideo: null,
     transitioning: false,
@@ -1828,10 +1828,18 @@ async function boot() {
     resumeAC();
   }
 
+  function attachBootInputHandler(el, handler, options) {
+    if (!el) return;
+    const normalizedOptions = options || false;
+    bootInputEvents.forEach(evt => {
+      el.addEventListener(evt, handler, normalizedOptions);
+      bootFlow.cleanupFns.push(() => el.removeEventListener(evt, handler, normalizedOptions));
+    });
+  }
+
   function attachSkipHandler(screenEl, handler) {
     if (!screenEl) return;
-    screenEl.addEventListener(skipInputEvent, handler, { passive: false });
-    bootFlow.cleanupFns.push(() => screenEl.removeEventListener(skipInputEvent, handler));
+    attachBootInputHandler(screenEl, handler, { passive: false });
   }
 
   function playBootVideo({ screenId, videoId, onComplete, allowFadeOut, fadeElementId }) {
@@ -1937,10 +1945,10 @@ async function boot() {
       if (ev?.cancelable) ev.preventDefault();
       markAudioUnlocked();
       bootFlow.lastUserStartTs = performance.now();
-      gate.removeEventListener(skipInputEvent, begin);
+      bootInputEvents.forEach(evt => gate.removeEventListener(evt, begin));
       resolve();
     };
-    gate.addEventListener(skipInputEvent, begin, { once: true, passive: false });
+    attachBootInputHandler(gate, begin, { once: true, passive: false });
   });
 
   if ($('screen-start')) {
