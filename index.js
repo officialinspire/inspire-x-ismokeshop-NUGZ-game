@@ -627,6 +627,11 @@ function highlightStrain(type) {
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+function debounce(fn, ms) {
+  let t;
+  return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+}
+
 // ═══════════════════════════════════════════════════════════
 //  HUD UPDATES
 // ═══════════════════════════════════════════════════════════
@@ -1166,7 +1171,7 @@ on('btnPlayAgain', () => { resumeAC(); newGame(); });
 on('btnGoMenu',    () => { showScreen('menu'); });
 
 // ─── RESIZE HANDLER ───────────────────────────────────────
-window.addEventListener('resize', () => {
+window.addEventListener('resize', debounce(() => {
   if ($('screen-game')?.classList.contains('active')) {
     G.cellSize = calcCellSize();
     setActiveCanvas();
@@ -1174,7 +1179,7 @@ window.addEventListener('resize', () => {
     resizeCanvas();
     drawGrid();
   }
-});
+}, 120));
 
 // ─── SYNC OPTIONS UI ──────────────────────────────────────
 function syncOpts() {
