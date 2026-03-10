@@ -159,6 +159,22 @@ function vib(pattern) {
   if (G.opts.vibrate && navigator.vibrate) navigator.vibrate(pattern);
 }
 
+const HAPTIC_PATTERNS = {
+  swap:     [10],
+  invalid:  [20, 20, 20],
+  combo:    [30, 30],
+  ladybug:  [40, 20, 40],
+  seed:     [60],
+  water:    [30, 30, 30],
+  levelup:  [80],
+  gameover: [200],
+};
+
+function playHaptic(type) {
+  if (!G.opts.vibrate) return;
+  try { navigator.vibrate?.(HAPTIC_PATTERNS[type] ?? []); } catch (e) {}
+}
+
 // ═══════════════════════════════════════════════════════════
 //  IMAGE LOADING
 // ═══════════════════════════════════════════════════════════
@@ -325,6 +341,8 @@ function activateLadybug(r, c) {
     spawnText(Math.floor(ROWS/2), c, '🐞 COL!', '#ff6655', 20);
   }
   SFX.bigClear();
+  playHaptic('ladybug');
+  screenFlash('rgba(220,40,40,0.18)');
   return keys;
 }
 
@@ -339,6 +357,8 @@ function activateSeed(r, c) {
       if (G.grid[rr][cc] === color) keys.push(`${rr},${cc}`);
   spawnText(r, c, '🌱 SEEDED!', '#88ff44', 22);
   SFX.bigClear();
+  playHaptic('seed');
+  screenFlash('rgba(136,255,68,0.18)');
   return keys;
 }
 
@@ -354,6 +374,8 @@ function activateWater(r, c) {
     }
   spawnText(r, c, '💧 SPLASH!', '#5ecfc8', 22);
   SFX.bigClear();
+  playHaptic('water');
+  screenFlash('rgba(94,207,200,0.18)');
   return keys;
 }
 
@@ -910,8 +932,8 @@ async function processMatches() {
 
     SFX.pop(toProcess.size);
     if (toProcess.size >= 6) { setTimeout(() => SFX.bigClear(), 60); screenFlash('rgba(255,100,0,0.22)'); }
-    if (G.combo >= 2) { setTimeout(() => SFX.combo(G.combo), 80); vib([30,20,55]); }
-    else vib(30);
+    if (G.combo >= 2) { setTimeout(() => SFX.combo(G.combo), 80); playHaptic('combo'); }
+    else playHaptic('swap');
 
     // Pop text over middle cell
     const midKey = cellsToPop[Math.floor(cellsToPop.length / 2)] || [...toProcess][0];
@@ -1067,7 +1089,7 @@ async function doSwap(r1, c1, r2, c2) {
   if (sp1) setSpecial(r2, c2, sp1);
   if (sp2) setSpecial(r1, c1, sp2);
 
-  SFX.swap(); vib(15);
+  SFX.swap(); playHaptic('swap');
   await animSwap(r1, c1, r2, c2);
 
   const hasMatch   = findMatches(G.grid).size > 0;
@@ -1079,7 +1101,7 @@ async function doSwap(r1, c1, r2, c2) {
     clearSpecial(r1, c1); clearSpecial(r2, c2);
     if (sp1) setSpecial(r1, c1, sp1);
     if (sp2) setSpecial(r2, c2, sp2);
-    SFX.invalid(); vib([20,20,20]);
+    SFX.invalid(); playHaptic('invalid');
     await animSwap(r1, c1, r2, c2);
     drawGrid();
     G.animating = false;
@@ -1148,7 +1170,7 @@ async function doLevelUp() {
   G.running = false;
 
   SFX.levelUp();
-  vib([50,30,100,30,160]);
+  playHaptic('levelup');
   screenFlash('rgba(255,120,0,0.28)');
   setTimeout(() => screenFlash('rgba(245,200,66,0.22)'), 180);
 
@@ -1184,7 +1206,7 @@ function doGameOver() {
   G.animating = false;
 
   SFX.gameOver();
-  vib([30,20,30,20,100]);
+  playHaptic('gameover');
 
   // Check if this is a new high score BEFORE adding
   const prevBest = highScores[0]?.score ?? 0;
