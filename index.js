@@ -552,11 +552,12 @@ function spawnDeselectFX(r, c) {
   setTimeout(() => el.remove(), 260);
 }
 
-function screenFlash(color='rgba(111,207,63,0.2)') {
+function screenFlash(color = 'rgba(111,207,63,0.2)') {
   if (!G.opts.effects) return;
   const el = document.createElement('div');
   el.className = 'fx-screen-flash';
   el.style.background = color;
+  el.style.zIndex = '400';
   document.body.appendChild(el);
   el.addEventListener('animationend', () => el.remove(), { once: true });
 }
