@@ -1000,6 +1000,27 @@ body.on-intro2 #smokeLayer { display: none; }
 .mobile-logo-sub { font-size: 13px; letter-spacing: 5px; margin-top: 0; }
 .mobile-logo-glow { height: 60px; }
 
+/* ─── MOBILE PORTRAIT MENU POSITIONING: avoid title overlap ─ */
+@media (max-width: 767px) and (orientation: portrait) {
+  .menu-mobile {
+    justify-content: flex-start;
+    padding-top: max(120px, env(safe-area-inset-top, 0px) + 12vh);
+    gap: 14px;
+  }
+
+  .mobile-logo-sub {
+    margin-top: 8px;
+  }
+
+  .mobile-nugs-row {
+    margin-top: 14px;
+  }
+
+  .mobile-menu-btns {
+    margin-top: 20px;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════
    SPECIAL POWERUP NUG CLASSES
    Used when the game renders via DOM elements instead of canvas.
