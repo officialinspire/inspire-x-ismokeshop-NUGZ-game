@@ -1627,7 +1627,6 @@ async function boot() {
     activeVideo: null,
     transitioning: false,
     lastUserStartTs: 0,
-    skipArmed: false,
     cleanupFns: [],
     audioUnlocked: false,
   };
@@ -1659,7 +1658,6 @@ async function boot() {
     runBootCleanup();
     bootFlow.activeVideo = video;
     bootFlow.transitioning = false;
-    bootFlow.skipArmed = false;
     showScreen(screenId.replace('screen-', ''));
 
     const fadeEl = allowFadeOut ? $(fadeElementId) : null;
@@ -1681,28 +1679,14 @@ async function boot() {
         try { bootFlow.activeVideo.currentTime = 0; } catch (_) {}
       }
       bootFlow.activeVideo = null;
-      bootFlow.skipArmed = false;
       onComplete?.();
     };
 
-    const unlockIntroAudio = () => {
-      markAudioUnlocked();
-      if (!video.paused && !video.ended && video.muted) {
-        video.muted = false;
-      }
+    const onPlaying = () => {
+      // Ensure intro audio is only active while video is actively playing.
+      if (video.muted) video.muted = false;
     };
-
-    const armSkip = () => {
-      if (done) return;
-      bootFlow.skipArmed = true;
-    };
-
-    const armTimeout = setTimeout(armSkip, 1600);
-    bootFlow.cleanupFns.push(() => clearTimeout(armTimeout));
-
-    const onPlaying = () => armSkip();
     const onTimeUpdate = () => {
-      if (!bootFlow.skipArmed && video.currentTime > 0.1) armSkip();
       if (!allowFadeOut || fadeStarted || done) return;
       const dur = video.duration;
       if (!fadeEl || Number.isNaN(dur) || dur <= 0) return;
@@ -1722,15 +1706,6 @@ async function boot() {
         if (ev?.cancelable) ev.preventDefault();
         return;
       }
-      if (!bootFlow.skipArmed) {
-        if (ev?.cancelable) ev.preventDefault();
-        return;
-      }
-      if (video.muted && !video.paused && !video.ended) {
-        if (ev?.cancelable) ev.preventDefault();
-        unlockIntroAudio();
-        return;
-      }
       if (ev?.cancelable) ev.preventDefault();
       complete();
     };
@@ -1746,15 +1721,19 @@ async function boot() {
 
     attachSkipHandler(screenEl, onSkipInput);
 
-    video.muted = true;
-    video.setAttribute('muted', '');
+    markAudioUnlocked();
+    video.muted = false;
+    video.removeAttribute('muted');
     video.setAttribute('playsinline', '');
     video.setAttribute('webkit-playsinline', '');
     try { video.currentTime = 0; } catch (_) {}
 
     video.play().catch(() => {
       if (done) return;
+      // Fallback: ensure playback still starts; if browser blocks unmuted autoplay,
+      // retry muted, then continue flow without hanging.
       video.muted = true;
+      video.setAttribute('muted', '');
       video.play().catch(() => complete());
     });
 
