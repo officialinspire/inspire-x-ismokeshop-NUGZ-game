@@ -853,7 +853,7 @@ body.on-intro #smokeLayer { display: none; }
 }
 @keyframes deselectOut { 0%{opacity:1;transform:scale(1);} 100%{opacity:0;transform:scale(1.35);} }
 .fx-screen-flash {
-  position:fixed; inset:0; pointer-events:none; z-index:300;
+  position:fixed; inset:0; pointer-events:none; z-index:400;
   animation:sFlash .45s ease forwards;
 }
 @keyframes sFlash { 0%{opacity:0.55;} 100%{opacity:0;} }
