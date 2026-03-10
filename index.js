@@ -1621,123 +1621,163 @@ async function boot() {
     }
   }
 
-  // ── ISMOKESHOP CREDIT VIDEO ───────────────────────────────
-  // Plays after the Inspire intro; fades to black at the end.
-  // Tapping/clicking skips directly to the menu.
-  function startISmoke() {
-    const vid2 = $('intro2Video');
-    if (!vid2) { goToMenu(); return; }
-    showScreen('intro2');
+  const SKIP_GHOST_THRESHOLD_MS = 1000;
+  const skipInputEvent = window.PointerEvent ? 'pointerup' : 'click';
+  const bootFlow = {
+    activeVideo: null,
+    transitioning: false,
+    lastUserStartTs: 0,
+    skipArmed: false,
+    cleanupFns: [],
+    audioUnlocked: false,
+  };
 
-    // Unmute video and start bgMusic on first user gesture
-    const unlock2 = () => {
-      resumeAC();
-      if (G.opts.music && bgMusic?.paused) bgMusic.play().catch(()=>{});
-      if (!vid2.ended && !vid2.paused) vid2.muted = false;
-    };
-    document.addEventListener('click',      unlock2, { once: true });
-    document.addEventListener('touchstart', unlock2, { once: true });
-
-    let gone2 = false;
-    function goToMenuOnce2() {
-      if (gone2) return;
-      gone2 = true;
-      goToMenu();
+  function runBootCleanup() {
+    while (bootFlow.cleanupFns.length) {
+      const fn = bootFlow.cleanupFns.pop();
+      try { fn?.(); } catch (_) {}
     }
-
-    // Try unmuted autoplay, fall back to muted, fall back to skip
-    vid2.play().catch(() => {
-      if (gone2) return;
-      vid2.muted = true;
-      vid2.play().catch(() => goToMenuOnce2());
-    });
-
-    // Fade to black over the last 1.5 s of the video
-    const FADE_DUR = 1.5;
-    let fadeStarted = false;
-    vid2.addEventListener('timeupdate', () => {
-      if (fadeStarted || gone2) return;
-      const dur = vid2.duration;
-      if (!isNaN(dur) && dur > 0) {
-        const remaining = dur - vid2.currentTime;
-        if (remaining <= FADE_DUR) {
-          fadeStarted = true;
-          const fadeEl = $('intro2Fade');
-          if (fadeEl) {
-            fadeEl.style.transition = `opacity ${remaining.toFixed(2)}s linear`;
-            fadeEl.style.opacity = '1';
-          }
-        }
-      }
-    });
-
-    let skipTriggered2 = false;
-    const skip2 = (ev) => {
-      if (skipTriggered2) return;
-      // On touch devices, first tap while muted should enable audio instead of
-      // immediately skipping the credit.
-      if (ev?.type === 'touchstart' && vid2.muted && !vid2.ended && !vid2.paused) {
-        if (ev?.cancelable) ev.preventDefault();
-        ev?.stopPropagation?.();
-        unlock2();
-        return;
-      }
-      skipTriggered2 = true;
-      if (ev?.cancelable) ev.preventDefault();
-      ev?.stopPropagation?.();
-      vid2.removeEventListener('ended',     skip2);
-      $('screen-intro2')?.removeEventListener('click',      skip2);
-      $('screen-intro2')?.removeEventListener('touchstart', skip2);
-      document.removeEventListener('click',      unlock2);
-      document.removeEventListener('touchstart', unlock2);
-      goToMenuOnce2();
-      requestAnimationFrame(() => {
-        vid2.pause();
-        vid2.removeAttribute('autoplay');
-        vid2.querySelectorAll('source').forEach(s => s.remove());
-        vid2.removeAttribute('src');
-        vid2.load();
-      });
-    };
-    vid2.addEventListener('ended',     skip2);
-    $('screen-intro2')?.addEventListener('click',      skip2);
-    $('screen-intro2')?.addEventListener('touchstart', skip2, { passive: false });
   }
 
-  // ── TOUCH TO START GATE ───────────────────────────────────
-  // Mobile browsers block autoplay with sound until a user gesture.
-  // Require an explicit tap/click before beginning intro playback.
-  function primeVideoPlayback(video) {
-    if (!video) return;
-    try {
-      video.muted = true;
-      video.setAttribute('muted', '');
-      video.setAttribute('playsinline', '');
-      video.setAttribute('webkit-playsinline', '');
-      const maybePlay = video.play();
-      if (maybePlay?.then) {
-        maybePlay
-          .then(() => {
-            video.pause();
-            try { video.currentTime = 0; } catch (_) {}
-          })
-          .catch(() => {});
+  function markAudioUnlocked() {
+    if (bootFlow.audioUnlocked) return;
+    bootFlow.audioUnlocked = true;
+    resumeAC();
+  }
+
+  function attachSkipHandler(screenEl, handler) {
+    if (!screenEl) return;
+    screenEl.addEventListener(skipInputEvent, handler, { passive: false });
+    bootFlow.cleanupFns.push(() => screenEl.removeEventListener(skipInputEvent, handler));
+  }
+
+  function playBootVideo({ screenId, videoId, onComplete, allowFadeOut, fadeElementId }) {
+    const video = $(videoId);
+    const screenEl = $(screenId);
+    if (!video || !screenEl) { onComplete?.(); return; }
+
+    runBootCleanup();
+    bootFlow.activeVideo = video;
+    bootFlow.transitioning = false;
+    bootFlow.skipArmed = false;
+    showScreen(screenId.replace('screen-', ''));
+
+    const fadeEl = allowFadeOut ? $(fadeElementId) : null;
+    if (fadeEl) {
+      fadeEl.style.transition = 'none';
+      fadeEl.style.opacity = '0';
+    }
+
+    let done = false;
+    let fadeStarted = false;
+
+    const complete = () => {
+      if (done || bootFlow.transitioning) return;
+      done = true;
+      bootFlow.transitioning = true;
+      runBootCleanup();
+      if (bootFlow.activeVideo) {
+        bootFlow.activeVideo.pause();
+        try { bootFlow.activeVideo.currentTime = 0; } catch (_) {}
       }
-    } catch (_) {}
+      bootFlow.activeVideo = null;
+      bootFlow.skipArmed = false;
+      onComplete?.();
+    };
+
+    const unlockIntroAudio = () => {
+      markAudioUnlocked();
+      if (!video.paused && !video.ended && video.muted) {
+        video.muted = false;
+      }
+    };
+
+    const armSkip = () => {
+      if (done) return;
+      bootFlow.skipArmed = true;
+    };
+
+    const armTimeout = setTimeout(armSkip, 1600);
+    bootFlow.cleanupFns.push(() => clearTimeout(armTimeout));
+
+    const onPlaying = () => armSkip();
+    const onTimeUpdate = () => {
+      if (!bootFlow.skipArmed && video.currentTime > 0.1) armSkip();
+      if (!allowFadeOut || fadeStarted || done) return;
+      const dur = video.duration;
+      if (!fadeEl || Number.isNaN(dur) || dur <= 0) return;
+      const remaining = dur - video.currentTime;
+      if (remaining <= 1.5) {
+        fadeStarted = true;
+        fadeEl.style.transition = `opacity ${Math.max(remaining, 0.15).toFixed(2)}s linear`;
+        fadeEl.style.opacity = '1';
+      }
+    };
+    const onEnded = () => complete();
+    const onError = () => complete();
+    const onSkipInput = (ev) => {
+      if (done || bootFlow.transitioning) return;
+      const elapsed = performance.now() - bootFlow.lastUserStartTs;
+      if (elapsed < SKIP_GHOST_THRESHOLD_MS) {
+        if (ev?.cancelable) ev.preventDefault();
+        return;
+      }
+      if (!bootFlow.skipArmed) {
+        if (ev?.cancelable) ev.preventDefault();
+        return;
+      }
+      if (video.muted && !video.paused && !video.ended) {
+        if (ev?.cancelable) ev.preventDefault();
+        unlockIntroAudio();
+        return;
+      }
+      if (ev?.cancelable) ev.preventDefault();
+      complete();
+    };
+
+    video.addEventListener('playing', onPlaying);
+    video.addEventListener('timeupdate', onTimeUpdate);
+    video.addEventListener('ended', onEnded);
+    video.addEventListener('error', onError, { once: true });
+    bootFlow.cleanupFns.push(() => video.removeEventListener('playing', onPlaying));
+    bootFlow.cleanupFns.push(() => video.removeEventListener('timeupdate', onTimeUpdate));
+    bootFlow.cleanupFns.push(() => video.removeEventListener('ended', onEnded));
+    bootFlow.cleanupFns.push(() => video.removeEventListener('error', onError));
+
+    attachSkipHandler(screenEl, onSkipInput);
+
+    video.muted = true;
+    video.setAttribute('muted', '');
+    video.setAttribute('playsinline', '');
+    video.setAttribute('webkit-playsinline', '');
+    try { video.currentTime = 0; } catch (_) {}
+
+    video.play().catch(() => {
+      if (done) return;
+      video.muted = true;
+      video.play().catch(() => complete());
+    });
+
+    const playbackWatchdog = setTimeout(() => {
+      if (done || video.ended) return;
+      if (video.paused || video.readyState < 2) {
+        video.play().catch(() => complete());
+      }
+    }, 1400);
+    bootFlow.cleanupFns.push(() => clearTimeout(playbackWatchdog));
   }
 
   const awaitUserStart = () => new Promise(resolve => {
     const gate = $('screen-start');
+    if (!gate) { resolve(); return; }
     const begin = (ev) => {
       if (ev?.cancelable) ev.preventDefault();
-      gate?.removeEventListener('click', begin);
-      gate?.removeEventListener('touchstart', begin);
-      resumeAC();
-      primeVideoPlayback($('introVideo'));
+      markAudioUnlocked();
+      bootFlow.lastUserStartTs = performance.now();
+      gate.removeEventListener(skipInputEvent, begin);
       resolve();
     };
-    gate?.addEventListener('click', begin, { once: true });
-    gate?.addEventListener('touchstart', begin, { once: true, passive: false });
+    gate.addEventListener(skipInputEvent, begin, { once: true, passive: false });
   });
 
   if ($('screen-start')) {
@@ -1745,127 +1785,17 @@ async function boot() {
     await awaitUserStart();
   }
 
-  // ── INSPIRE INTRO VIDEO ───────────────────────────────────
-  // Plays first; on end or tap transitions to the iSmokeShop credit.
-  const vid = $('introVideo');
-  if (vid) {
-    showScreen('intro');
-
-    // Audio context must be unlocked by first user gesture; also unmute video if it
-    // had to start muted for autoplay compliance.
-    // Only start bgMusic if it isn't already playing — prevents a double-play glitch
-    // when skip() and unlock() both fire from the same tap (skip goes first via
-    // bubbling and already starts music via handleMusic; unlock just fills the gap
-    // for cases where the first play() was blocked by autoplay policy).
-    // A single mobile tap also synthesizes a click after touchstart, so without the
-    // paused-guard bgMusic.play() would be called twice, causing an audible stutter.
-    const unlock = () => {
-      resumeAC();
-      if (G.opts.music && bgMusic?.paused) bgMusic.play().catch(()=>{});
-      if (!vid.ended && !vid.paused) vid.muted = false;
-    };
-    document.addEventListener('click',      unlock, { once: true });
-    document.addEventListener('touchstart', unlock, { once: true });
-
-    // Guard against startISmoke() being called twice (e.g. vid.pause() causes
-    // the pending play() promise to reject, which would re-fire the catch handler)
-    let gone = false;
-    function goToIsmokeOnce() {
-      if (gone) return;
-      gone = true;
-      startISmoke();
-    }
-
-    // Mobile Safari/Chrome can report a successful play() call for unmuted media,
-    // then keep the element paused/black when user-activation has already been
-    // consumed by a prior "Tap to Start" handler. Starting muted first is more
-    // reliable across mobile browsers, then a later tap can unmute via unlock().
-    vid.muted = true;
-    vid.setAttribute('muted', '');
-    vid.setAttribute('playsinline', '');
-    vid.setAttribute('webkit-playsinline', '');
-    try { vid.currentTime = 0; } catch (_) {}
-    vid.play().catch(() => {
-      if (gone) return;
-      goToIsmokeOnce();
-    });
-
-    // Some mobile browsers report play() as successful but keep the first frame
-    // stalled/black after a prior gesture gate. Retry once; if still stalled,
-    // fail forward so the user never gets trapped on a black intro screen.
-    setTimeout(() => {
-      if (gone || vid.ended) return;
-      if (vid.paused || vid.readyState < 2) {
-        vid.play().catch(() => goToIsmokeOnce());
-      }
-    }, 1400);
-
-    vid.addEventListener('error', () => {
-      if (gone) return;
-      goToIsmokeOnce();
-    }, { once: true });
-
-    let skipTriggered = false;
-    // On mobile, the same tap used on the start gate can emit a delayed
-    // synthetic click after we switch to the intro screen. Ignore early skip
-    // gestures briefly so the Inspire video always starts instead of being
-    // skipped immediately into the iSmoke credit.
-    let introSkipArmed = false;
-    const introSkipArmTimer = setTimeout(() => { introSkipArmed = true; }, 650);
-    const skip = (ev) => {
-      if (skipTriggered) return;
-      if (ev?.type !== 'ended' && !introSkipArmed) {
-        if (ev?.cancelable) ev.preventDefault();
-        ev?.stopPropagation?.();
-        return;
-      }
-      // On touch devices, first tap while muted should enable audio instead of
-      // immediately skipping the intro.
-      if (ev?.type === 'touchstart' && vid.muted && !vid.ended && !vid.paused) {
-        if (ev?.cancelable) ev.preventDefault();
-        ev?.stopPropagation?.();
-        unlock();
-        return;
-      }
-      skipTriggered = true;
-      // On mobile, touchstart is followed by a synthetic click. Suppress it so
-      // skip/unlock handlers cannot race each other and stall the transition.
-      if (ev?.cancelable) ev.preventDefault();
-      ev?.stopPropagation?.();
-      vid.removeEventListener('ended',     skip);
-      $('screen-intro')?.removeEventListener('click',      skip);
-      $('screen-intro')?.removeEventListener('touchstart', skip);
-      // Remove unlock listeners so they can't race against vid.pause() on the
-      // same touchstart event (bubbling to document would call vid.muted=false
-      // on a video that's mid-pause, causing a media-pipeline freeze on mobile)
-      document.removeEventListener('click',      unlock);
-      document.removeEventListener('touchstart', unlock);
-      clearTimeout(introSkipArmTimer);
-      goToIsmokeOnce(); // transition first so the UI never stalls
-      // Full media teardown is more reliable on mobile than pause() during a
-      // gesture event, which can freeze Safari/Chrome media pipelines.
-      // Remove <source> children and the autoplay attribute BEFORE calling
-      // vid.load() — otherwise load() re-reads the <source> src, autoplay
-      // kicks in, and the video replays (even in a hidden container, some
-      // mobile browsers surface the video or prevent the menu transition).
-      requestAnimationFrame(() => {
-        vid.pause();
-        vid.removeAttribute('autoplay');
-        vid.querySelectorAll('source').forEach(s => s.remove());
-        vid.removeAttribute('src');
-        vid.load();
-      });
-    };
-    vid.addEventListener('ended',     skip);
-    $('screen-intro')?.addEventListener('click',      skip);
-    $('screen-intro')?.addEventListener('touchstart', skip, { passive: false });
-  } else {
-    // Audio unlock still needed even without Inspire intro video
-    const unlock = () => { resumeAC(); if (G.opts.music && bgMusic?.paused) bgMusic.play().catch(()=>{}); };
-    document.addEventListener('click',      unlock, { once: true });
-    document.addEventListener('touchstart', unlock, { once: true });
-    startISmoke();
-  }
+  playBootVideo({
+    screenId: 'screen-intro',
+    videoId: 'introVideo',
+    onComplete: () => playBootVideo({
+      screenId: 'screen-intro2',
+      videoId: 'intro2Video',
+      allowFadeOut: true,
+      fadeElementId: 'intro2Fade',
+      onComplete: () => goToMenu(),
+    }),
+  });
 
   // Load all sprites then populate menu decorations (runs in background)
   await loadImages();
