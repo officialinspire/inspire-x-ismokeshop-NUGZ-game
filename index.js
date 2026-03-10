@@ -1245,11 +1245,13 @@ async function boot() {
     const skip = () => {
       vid.removeEventListener('ended', skip);
       $('screen-intro')?.removeEventListener('click', skip);
+      $('screen-intro')?.removeEventListener('touchstart', skip);
       goToMenuOnce(); // transition first so the UI never stalls
       vid.pause();    // then stop the video (safe to do after DOM update)
     };
     vid.addEventListener('ended', skip);
     $('screen-intro')?.addEventListener('click', skip);
+    $('screen-intro')?.addEventListener('touchstart', skip, { passive: true });
   } else {
     // Audio unlock still needed even without intro video
     const unlock = () => { resumeAC(); if (G.opts.music) toggleMusic(true); };
