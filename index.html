@@ -30,9 +30,20 @@
 <div id="app">
 
   <!-- ══════════════════════════════════════
+       TOUCH TO START SCREEN
+  ══════════════════════════════════════ -->
+  <div id="screen-start" class="screen active">
+    <div id="startGate">
+      <div class="start-title">NUGZ</div>
+      <div class="start-sub">Tap to Start</div>
+      <div class="start-hint">Enable audio and begin intro</div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
        INTRO VIDEO SCREEN
   ══════════════════════════════════════ -->
-  <div id="screen-intro" class="screen active">
+  <div id="screen-intro" class="screen">
     <video id="introVideo" playsinline autoplay preload="auto">
       <source src="inspiresoftwareintro.mp4" type="video/mp4">
     </video>

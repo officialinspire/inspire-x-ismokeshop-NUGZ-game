@@ -71,7 +71,7 @@ function bindActiveCanvasInput() {
 }
 
 // ─── SCREEN MANAGER ───────────────────────────────────────
-const SCREEN_IDS = ['intro','intro2','menu','game','pause','gameover','levelup','scores','options'];
+const SCREEN_IDS = ['start','intro','intro2','menu','game','pause','gameover','levelup','scores','options'];
 function showScreen(name) {
   SCREEN_IDS.forEach(id => $(`screen-${id}`)?.classList.remove('active'));
   $(`screen-${name}`)?.classList.add('active');
@@ -1702,6 +1702,27 @@ async function boot() {
     vid2.addEventListener('ended',     skip2);
     $('screen-intro2')?.addEventListener('click',      skip2);
     $('screen-intro2')?.addEventListener('touchstart', skip2, { passive: false });
+  }
+
+  // ── TOUCH TO START GATE ───────────────────────────────────
+  // Mobile browsers block autoplay with sound until a user gesture.
+  // Require an explicit tap/click before beginning intro playback.
+  const awaitUserStart = () => new Promise(resolve => {
+    const gate = $('screen-start');
+    const begin = (ev) => {
+      if (ev?.cancelable) ev.preventDefault();
+      gate?.removeEventListener('click', begin);
+      gate?.removeEventListener('touchstart', begin);
+      resumeAC();
+      resolve();
+    };
+    gate?.addEventListener('click', begin, { once: true });
+    gate?.addEventListener('touchstart', begin, { once: true, passive: false });
+  });
+
+  if ($('screen-start')) {
+    showScreen('start');
+    await awaitUserStart();
   }
 
   // ── INSPIRE INTRO VIDEO ───────────────────────────────────
