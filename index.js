@@ -843,7 +843,8 @@ function validateSave(save) {
   for (let r = 0; r < ROWS; r++) {
     if (!Array.isArray(save.grid[r]) || save.grid[r].length !== COLS) return false;
     for (let c = 0; c < COLS; c++) {
-      if (!NUG_TYPES.includes(save.grid[r][c])) return false;
+      const cell = save.grid[r][c];
+      if (cell !== null && !NUG_TYPES.includes(cell)) return false;
     }
   }
   if (!Array.isArray(save.nextNugs) || save.nextNugs.length === 0) return false;
@@ -1072,6 +1073,7 @@ on(['btnResume-d','btnResume-m'], () => {
     G.opts      = currentOpts;   // ← FIX: don't restore stale opts from save
     G.running   = true;
     G.animating = false;
+    gravity(G.grid);  // heal any nulls from mid-cascade save
     cellAnims   = {};
     _prevMoves  = G.moves;
 
