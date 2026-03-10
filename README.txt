@@ -5,7 +5,7 @@ Files required in root folder:
   styles.css
   index.js
   nugz-background.png
-  ismokeshop-logo.png
+  logo.png
   sprites/  (folder with all .png files)
 
 MUSIC: Place "NUGZ Main Menu (Take 1).mp3" in the root folder.
