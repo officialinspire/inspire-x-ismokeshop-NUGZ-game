@@ -35,6 +35,10 @@ const PERF = {
   disableExtraFlashAtMassive: true,
   disableStrainSpamAtMassive: true
 };
+const FX_LIMITS = {
+  maxPopTexts: 10,
+  maxParticles: 120
+};
 
 // ─── LAYOUT DETECTION ─────────────────────────────────────
 const isMobile = () => {
@@ -60,6 +64,8 @@ let images      = {};
 let cellAnims   = {};
 let activeCanvas, activePopLayer;
 let strainElsByType = null;
+let activePopTextCount = 0;
+let activeParticleCount = 0;
 // Track previous moves count to fire lowPuffs SFX only on the transition to 5
 let _prevMoves  = 30;
 
@@ -773,8 +779,20 @@ function cellCenter(r, c) {
   return { x: off.x + c*cs + cs/2, y: off.y + r*cs + cs/2 };
 }
 
+function removeFxElement(el, onRemove) {
+  if (!el || el.dataset.fxRemoved === '1') return;
+  el.dataset.fxRemoved = '1';
+  onRemove?.();
+  el.remove();
+}
+
+function bindFxLifecycle(el, onRemove) {
+  el.addEventListener('animationend', () => removeFxElement(el, onRemove), { once: true });
+}
+
 function spawnText(r, c, text, color='#f5c842', size=26) {
   if (!G.opts.effects) return;
+  if (activePopTextCount >= FX_LIMITS.maxPopTexts) return;
   const cs = G.cellSize;
   const off = canvasOffset();
   const x = off.x + c*cs + cs*0.1;
@@ -784,16 +802,20 @@ function spawnText(r, c, text, color='#f5c842', size=26) {
   el.textContent = text;
   el.style.cssText = `color:${color};font-size:${size}px;left:${x}px;top:${y}px;`;
   activePopLayer.appendChild(el);
-  el.addEventListener('animationend', () => el.remove(), { once: true });
+  activePopTextCount++;
+  bindFxLifecycle(el, () => { activePopTextCount = Math.max(0, activePopTextCount - 1); });
 }
 
 function spawnParticles(r, c, color, n=10) {
   if (!G.opts.effects) return;
+  if (activeParticleCount >= FX_LIMITS.maxParticles) return;
   const { x: px, y: py } = cellCenter(r, c);
-  for (let i = 0; i < n; i++) {
+  const spawnCount = Math.min(n, FX_LIMITS.maxParticles - activeParticleCount);
+  if (spawnCount <= 0) return;
+  for (let i = 0; i < spawnCount; i++) {
     const el = document.createElement('div');
     el.className = 'particle';
-    const ang = (i/n)*Math.PI*2 + Math.random()*0.4;
+    const ang = (i/spawnCount)*Math.PI*2 + Math.random()*0.4;
     const dist = 20 + Math.random()*40, sz = 3 + Math.random()*7;
     el.style.cssText = `
       width:${sz}px; height:${sz}px; background:${color};
@@ -801,15 +823,18 @@ function spawnParticles(r, c, color, n=10) {
       --dx:${Math.cos(ang)*dist}px; --dy:${Math.sin(ang)*dist}px;
       animation-duration:${0.38 + Math.random()*0.34}s;`;
     activePopLayer.appendChild(el);
-    el.addEventListener('animationend', () => el.remove(), { once: true });
+    activeParticleCount++;
+    bindFxLifecycle(el, () => { activeParticleCount = Math.max(0, activeParticleCount - 1); });
   }
 }
 
 function spawnFireParticles(r, c, count = 14) {
   if (!G.opts.effects) return;
+  if (activeParticleCount >= FX_LIMITS.maxParticles) return;
   const { x: px, y: py } = cellCenter(r, c);
   const fireColors = ['#ffee22','#ffcc00','#ffaa00','#ff7700','#ff4400','#ff2200'];
-  const n = count;
+  const n = Math.min(count, FX_LIMITS.maxParticles - activeParticleCount);
+  if (n <= 0) return;
   for (let i = 0; i < n; i++) {
     const el = document.createElement('div');
     el.className = 'fire-particle';
@@ -828,7 +853,8 @@ function spawnFireParticles(r, c, count = 14) {
       --fdx:${fdx}px; --fdy:${fdy}px;
       animation-duration:${dur}s;`;
     activePopLayer.appendChild(el);
-    el.addEventListener('animationend', () => el.remove(), { once: true });
+    activeParticleCount++;
+    bindFxLifecycle(el, () => { activeParticleCount = Math.max(0, activeParticleCount - 1); });
   }
 }
 
@@ -1145,6 +1171,8 @@ function newGame() {
   G.specials     = {};
   cellAnims      = {};
   _prevMoves     = 30;
+  activePopTextCount = 0;
+  activeParticleCount = 0;
 
   G.cellSize = calcCellSize();
   setActiveCanvas();
@@ -1426,7 +1454,7 @@ function setupCanvasInput(cvs) {
 
   cvs.addEventListener('touchend', e => {
     e.preventDefault();
-    if (!_touchStart || !G.selected || G.animating) { _touchStart = null; return; }
+    if (!_touchStart || !G.selected || G.animating || !G.running) { _touchStart = null; return; }
     const t   = e.changedTouches[0];
     const dx  = t.clientX - _touchStart.x;
     const dy  = t.clientY - _touchStart.y;
