@@ -153,13 +153,8 @@ function vib(pattern) {
 // ═══════════════════════════════════════════════════════════
 function loadImages() {
   return new Promise(resolve => {
-    const keys = [
-      ...NUG_TYPES,
-      ...NUG_TYPES.map(n => n + '_glow'),
-      ...NUG_TYPES.map(n => n + '_pop')
-    ];
-    let pending = keys.length;
-    keys.forEach(k => {
+    let pending = NUG_TYPES.length;
+    NUG_TYPES.forEach(k => {
       const img = new Image();
       img.onload = img.onerror = () => { if (--pending <= 0) resolve(); };
       img.src = `sprites/${k}.png`;
@@ -363,7 +358,7 @@ function drawGrid() {
       ctx.translate(cx, cy);
       if (isSel) { ctx.shadowColor = '#6fcf3f'; ctx.shadowBlur = 22; }
 
-      const imgKey = isSel ? type + '_glow' : type;
+      const imgKey = type;
       const img = images[imgKey];
       if (img?.complete && img.naturalWidth > 0) {
         ctx.drawImage(img, -size/2, -size/2, size, size);
