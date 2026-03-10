@@ -1252,8 +1252,15 @@ async function boot() {
       vid.removeEventListener('ended', skip);
       $('screen-intro')?.removeEventListener('click', skip);
       $('screen-intro')?.removeEventListener('touchstart', skip);
+      // Remove unlock listeners so they can't race against vid.pause() on the
+      // same touchstart event (bubbling to document would call vid.muted=false
+      // on a video that's mid-pause, causing a media-pipeline freeze on mobile)
+      document.removeEventListener('click',      unlock);
+      document.removeEventListener('touchstart', unlock);
       goToMenuOnce(); // transition first so the UI never stalls
-      vid.pause();    // then stop the video (safe to do after DOM update)
+      // Defer pause to next frame so the browser paints the new screen before
+      // touching the media pipeline — prevents the main-thread freeze on iOS/Android
+      requestAnimationFrame(() => vid.pause());
     };
     vid.addEventListener('ended', skip);
     $('screen-intro')?.addEventListener('click', skip);
