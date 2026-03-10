@@ -66,6 +66,7 @@ let activeCanvas, activePopLayer;
 let strainElsByType = null;
 let activePopTextCount = 0;
 let activeParticleCount = 0;
+let transientFx = [];
 // Track previous moves count to fire lowPuffs SFX only on the transition to 5
 let _prevMoves  = 30;
 
@@ -706,6 +707,37 @@ function drawGrid() {
       }
     }
   }
+
+  updateTransientFx(performance.now());
+  if (transientFx.length) {
+    ctx.save();
+    for (let i = 0; i < transientFx.length; i++) {
+      const fx = transientFx[i];
+      if (fx.type === 'fire') {
+        ctx.globalAlpha = fx.alpha;
+        ctx.fillStyle = fx.color;
+        ctx.shadowColor = fx.color;
+        ctx.shadowBlur = fx.blur;
+        ctx.beginPath();
+        ctx.ellipse(fx.x, fx.y, fx.w * 0.5, fx.h * 0.5, fx.rot, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (fx.type === 'text') {
+        ctx.globalAlpha = fx.alpha;
+        ctx.fillStyle = fx.color;
+        ctx.font = `${fx.size}px system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        if (fx.shadow) {
+          ctx.shadowColor = fx.shadow;
+          ctx.shadowBlur = 8;
+        } else {
+          ctx.shadowBlur = 0;
+        }
+        ctx.fillText(fx.text, fx.x, fx.y);
+      }
+    }
+    ctx.restore();
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -790,6 +822,34 @@ function bindFxLifecycle(el, onRemove) {
   el.addEventListener('animationend', () => removeFxElement(el, onRemove), { once: true });
 }
 
+function pushTransientFx(fx) {
+  if (!G.opts.effects) return;
+  const maxTransient = FX_LIMITS.maxParticles * 2;
+  if (transientFx.length >= maxTransient) transientFx.shift();
+  transientFx.push(fx);
+}
+
+function updateTransientFx(now) {
+  if (!transientFx.length) return;
+  const alive = [];
+  for (let i = 0; i < transientFx.length; i++) {
+    const fx = transientFx[i];
+    const t = Math.max(0, now - fx.start);
+    const p = Math.min(t / fx.life, 1);
+    fx.x += fx.vx;
+    fx.y += fx.vy;
+    fx.vx *= fx.drag;
+    fx.vy = fx.vy * fx.drag + fx.gravity;
+    fx.alpha = fx.startAlpha * (1 - p);
+    if (fx.type === 'fire') {
+      fx.w = Math.max(1, fx.baseW * (1 - p * 0.4));
+      fx.h = Math.max(1, fx.baseH * (1 - p * 0.15));
+    }
+    if (p < 1 && fx.alpha > 0.01) alive.push(fx);
+  }
+  transientFx = alive;
+}
+
 function spawnText(r, c, text, color='#f5c842', size=26) {
   if (!G.opts.effects) return;
   if (activePopTextCount >= FX_LIMITS.maxPopTexts) return;
@@ -830,31 +890,39 @@ function spawnParticles(r, c, color, n=10) {
 
 function spawnFireParticles(r, c, count = 14) {
   if (!G.opts.effects) return;
-  if (activeParticleCount >= FX_LIMITS.maxParticles) return;
-  const { x: px, y: py } = cellCenter(r, c);
+  const cs = G.cellSize;
+  const px = c * cs + cs / 2;
+  const py = r * cs + cs / 2;
   const fireColors = ['#ffee22','#ffcc00','#ffaa00','#ff7700','#ff4400','#ff2200'];
-  const n = Math.min(count, FX_LIMITS.maxParticles - activeParticleCount);
+  const n = Math.min(count, FX_LIMITS.maxParticles);
   if (n <= 0) return;
+  const now = performance.now();
   for (let i = 0; i < n; i++) {
-    const el = document.createElement('div');
-    el.className = 'fire-particle';
     const color = fireColors[Math.floor(Math.random() * fireColors.length)];
     const sz = 4 + Math.random() * 8;
-    // Fan mostly upward with some spread
     const ang = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.85;
     const dist = 28 + Math.random() * 52;
-    const fdx = Math.cos(ang) * dist;
-    const fdy = Math.sin(ang) * dist;
-    const dur = (0.4 + Math.random() * 0.45).toFixed(2);
-    el.style.cssText = `
-      width:${sz}px; height:${sz * 1.35}px; background:${color};
-      box-shadow:0 0 4px ${color};
-      left:${px - sz / 2}px; top:${py - sz / 2}px;
-      --fdx:${fdx}px; --fdy:${fdy}px;
-      animation-duration:${dur}s;`;
-    activePopLayer.appendChild(el);
-    activeParticleCount++;
-    bindFxLifecycle(el, () => { activeParticleCount = Math.max(0, activeParticleCount - 1); });
+    const speed = dist / 18;
+    pushTransientFx({
+      type: 'fire',
+      start: now,
+      life: 380 + Math.random() * 360,
+      x: px + (Math.random() - 0.5) * 6,
+      y: py + (Math.random() - 0.5) * 6,
+      vx: Math.cos(ang) * speed,
+      vy: Math.sin(ang) * speed,
+      drag: 0.965,
+      gravity: -0.015,
+      color,
+      blur: 4,
+      rot: ang,
+      baseW: sz,
+      baseH: sz * 1.35,
+      w: sz,
+      h: sz * 1.35,
+      startAlpha: 0.9,
+      alpha: 0.9
+    });
   }
 }
 
@@ -1173,6 +1241,7 @@ function newGame() {
   _prevMoves     = 30;
   activePopTextCount = 0;
   activeParticleCount = 0;
+  transientFx = [];
 
   G.cellSize = calcCellSize();
   setActiveCanvas();
@@ -1618,6 +1687,7 @@ function resumeGame() {
       }
     }
     cellAnims  = {};
+    transientFx = [];
     _prevMoves = G.moves;
 
     G.cellSize = calcCellSize();
