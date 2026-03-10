@@ -57,6 +57,12 @@ const mobilePop     = $('popEffectsMobile');
 function setActiveCanvas() {
   activeCanvas   = isMobile() ? mobileCanvas   : desktopCanvas;
   activePopLayer = isMobile() ? mobilePop       : desktopPop;
+  bindActiveCanvasInput();
+}
+
+function bindActiveCanvasInput() {
+  desktopCanvas.style.pointerEvents = (activeCanvas === desktopCanvas) ? 'auto' : 'none';
+  mobileCanvas.style.pointerEvents  = (activeCanvas === mobileCanvas)  ? 'auto' : 'none';
 }
 
 // ─── SCREEN MANAGER ───────────────────────────────────────
@@ -707,6 +713,7 @@ function newGame() {
 
   G.cellSize = calcCellSize();
   setActiveCanvas();
+  bindActiveCanvasInput();
   resizeCanvas();
   updateHUD();
   updateNextDisplay();
@@ -1085,6 +1092,7 @@ on(['btnResume-d','btnResume-m'], () => {
 
     G.cellSize = calcCellSize();
     setActiveCanvas();
+    bindActiveCanvasInput();
     resizeCanvas();
     updateHUD();
     updateNextDisplay();
@@ -1150,6 +1158,7 @@ window.addEventListener('resize', () => {
   if ($('screen-game')?.classList.contains('active')) {
     G.cellSize = calcCellSize();
     setActiveCanvas();
+    bindActiveCanvasInput();
     resizeCanvas();
     drawGrid();
   }
@@ -1236,4 +1245,6 @@ async function boot() {
   initMenuNugs();
 }
 
+setActiveCanvas();
+bindActiveCanvasInput();
 boot();
