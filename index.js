@@ -602,6 +602,7 @@ async function processMatches() {
     await sleep(110);
     gravity(G.grid);
     await sleep(90);
+    if (G.cleared >= G.goal) break;
   }
 }
 
